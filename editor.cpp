@@ -246,9 +246,12 @@ void ImEdit::editor::render() {
         imgui_cursor.y += ImGui::GetTextLineHeightWithSpacing();
     }
     ImGui::Dummy(
-            {std::max(draw_region.x - ImGui::GetStyle().WindowPadding.x, max_line_width + 2),
+            {std::max(draw_region.x + extra_padding, max_line_width + 2),
              draw_region.y}
     );
+    if (ImGui::IsItemHovered()) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+    }
 
     if (_allow_keyboard_input) {
         ImGui::PopAllowKeyboardFocus();
@@ -546,10 +549,6 @@ void ImEdit::editor::handle_kb_input() {
 
     if (!ImGui::IsWindowFocused()) {
         return;
-    }
-
-    if (ImGui::IsWindowHovered()) {
-        ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
     }
 
     // TODO notify lexer, also with previous data.
