@@ -113,17 +113,41 @@ void ImEdit::editor::render() {
     const auto draw_width = _draw_width ? *_draw_width : _longest_line_px;
     const auto draw_height = _draw_height ? *_draw_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1);
 
-    auto imgui_cursor = ImGui::GetCursorScreenPos();
     const auto space_length = ImGui::CalcTextSize(" ");
+    auto imgui_cursor = ImGui::GetCursorScreenPos();
     const ImVec2 draw_region{draw_width, draw_height};
     auto draw_list = ImGui::GetWindowDrawList();
 
-    draw_list->AddRectFilled(imgui_cursor, imgui_cursor + draw_region,
+    // space to the left for displaying line numbers, breakpoints, and such
+    const auto extra_padding = compute_extra_padding();
+
+    draw_list->AddRectFilled(imgui_cursor,
+                             {imgui_cursor.x + draw_region.x + extra_padding, imgui_cursor.y + draw_region.y},
                              _style.background_color);
 
+
     float max_line_width = 0.f;
+    auto line_numbers_max_glyphs = std::to_string(_lines.size()).size();
     for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
         const line& line = _lines[i];
+
+        assert(!_cursors.empty());
+        if (_cursors.back().coord.line == i) {
+            draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x,
+                                                    imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
+                                     _style.current_line_color);
+        }
+
+        // drawing line numbers
+        auto line_number = std::to_string(i);
+        auto extra_shift = static_cast<float>(line_numbers_max_glyphs - line_number.size()) * space_length.x;
+        draw_list->AddText({imgui_cursor.x + extra_shift, imgui_cursor.y}, _style.line_number_color, line_number.c_str());
+
+        imgui_cursor.x += extra_padding - 5;
+        draw_list->AddLine(imgui_cursor, {imgui_cursor.x, imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
+                           _style.line_number_separator_color);
+        imgui_cursor.x += 5;
+
         if (imgui_cursor.y >= draw_region.y + _imgui_cursor_position.y) {
             break;
         }
@@ -208,7 +232,7 @@ void ImEdit::editor::render() {
                 time %= 1500;
 
                 if (time.count() > 400) {
-                    auto x = _imgui_cursor_position.x + static_cast<float>(column_count_to(c.coord)) * space_length.x;
+                    auto x = _imgui_cursor_position.x + static_cast<float>(column_count_to(c.coord)) * space_length.x + extra_padding - 1;
                     draw_list->AddLine(
                             {x, imgui_cursor.y + 2}, {x, imgui_cursor.y + space_length.y - 2},
                             _style.cursor_color
@@ -241,8 +265,12 @@ ImEdit::editor::editor() :
 
 ImEdit::style ImEdit::editor::get_default_style() {
     struct style s{};
-    s.cursor_color = ImColor(255, 255, 255);
-    s.background_color = ImColor(43,43,43);
+    s.cursor_color                                = ImColor(255, 255, 255, 255);
+    s.background_color                            = ImColor( 43,  43,  43, 255);
+    s.selection_color                             = ImColor( 33,  66, 131, 255);
+    s.line_number_color                           = ImColor(158, 160, 159, 255);
+    s.line_number_separator_color                 = ImColor( 55,  55,  55, 255);
+    s.current_line_color                          = ImColor( 50,  50,  50, 255);
     s.token_colors[token_type::unknown]           = ImColor(  0,   0,   0, 255);
     s.token_colors[token_type::keyword]           = ImColor(210,  40,  58, 255);
     s.token_colors[token_type::comment]           = ImColor(120, 120, 120, 255);
@@ -714,12 +742,13 @@ void ImEdit::editor::handle_mouse_input() {
 }
 
 ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) {
-    // TODO what about scroll?
     // TODO what about folded regions?
     auto glyph_size = ImGui::CalcTextSize(" ");
     coordinates_cbl coords;
     pos.x -= _imgui_cursor_position.x;
     pos.y -= _imgui_cursor_position.y;
+
+    pos.x -= compute_extra_padding();
 
     auto line = std::min(static_cast<unsigned>(std::round((pos.y - 3)/ ImGui::GetTextLineHeightWithSpacing())),
                          static_cast<unsigned>(_lines.size() - 1));
@@ -730,4 +759,9 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
     coords.glyph = base_coords.glyph;
 
     return coords;
+}
+
+float ImEdit::editor::compute_extra_padding() const noexcept {
+    auto glyph_length = ImGui::CalcTextSize(" ").x; // TODO : cache this.
+    return _lines.empty() ? 5 * glyph_length : std::floor(std::log10(static_cast<float>(_lines.size())) + 4) * glyph_length;
 }

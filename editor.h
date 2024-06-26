@@ -56,6 +56,10 @@ namespace ImEdit {
     struct style {
         ImColor cursor_color{};
         ImColor background_color{};
+        ImColor selection_color{};
+        ImColor line_number_color{};
+        ImColor line_number_separator_color{};
+        ImColor current_line_color{};
         std::unordered_map<token_type::enum_, ImColor, token_type> token_colors{};
     };
 
@@ -140,6 +144,7 @@ namespace ImEdit {
 
         void handle_kb_input();
         void handle_mouse_input();
+        float compute_extra_padding() const noexcept;
 
         std::vector<cursor> _cursors{};
         std::deque<std::string> _tooltips{};
