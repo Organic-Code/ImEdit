@@ -232,7 +232,7 @@ void ImEdit::editor::render() {
                 time %= 1500;
 
                 if (time.count() > 400) {
-                    auto x = _imgui_cursor_position.x + static_cast<float>(column_count_to(c.coord)) * space_length.x + extra_padding - 1;
+                    auto x = _imgui_cursor_position.x + static_cast<float>(column_count_to(c.coord)) * space_length.x + extra_padding;
                     draw_list->AddLine(
                             {x, imgui_cursor.y + 2}, {x, imgui_cursor.y + space_length.y - 2},
                             _style.cursor_color
@@ -294,26 +294,26 @@ ImEdit::style ImEdit::editor::get_default_style() {
 }
 
 
-void ImEdit::editor::cursor_move_up() {
+void ImEdit::editor::cursors_move_up() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_up(cursor.coord, cursor.wanted_column);
     }
     delete_non_unique_cursors();
 }
-void ImEdit::editor::cursor_move_down() {
+void ImEdit::editor::cursors_move_down() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_down(cursor.coord, cursor.wanted_column);
     }
     delete_non_unique_cursors();
 }
-void ImEdit::editor::cursor_move_left() {
+void ImEdit::editor::cursors_move_left() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_left(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
     delete_non_unique_cursors();
 }
-void ImEdit::editor::cursor_move_right() {
+void ImEdit::editor::cursors_move_right() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_right(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
@@ -405,7 +405,7 @@ ImEdit::coordinates ImEdit::editor::coordinates_move_right(coordinates coord) co
     return coord;
 }
 
-void ImEdit::editor::cursor_move_to_end() {
+void ImEdit::editor::cursors_move_to_end() {
     for (auto& cursor : _cursors) {
         if (!_lines[cursor.coord.line].tokens.empty()) {
             cursor.coord.token = _lines[cursor.coord.line].tokens.size() - 1;
@@ -416,13 +416,53 @@ void ImEdit::editor::cursor_move_to_end() {
     delete_non_unique_cursors();
 }
 
-void ImEdit::editor::cursor_move_to_beg() {
+void ImEdit::editor::cursors_move_to_beg() {
     for (auto& cursor : _cursors) {
         cursor.coord.token = 0;
         cursor.coord.glyph = 0;
         cursor.wanted_column = 0;
     }
     delete_non_unique_cursors();
+}
+
+void ImEdit::editor::cursors_move_left_token() {
+    // TODO: change for going from word to word instead of from token to token ?
+    for (auto& cursor : _cursors) {
+        if (cursor.coord.glyph > 0) {
+            cursor.coord.glyph = 0;
+
+        } else if (cursor.coord.token > 0) {
+            --cursor.coord.token;
+            // cursor.coord.glyph == 0
+
+        } else {
+            cursor.coord = coordinates_move_left(cursor.coord); // just one left: previous line
+        }
+
+        cursor.wanted_column = column_count_to(cursor.coord);
+    }
+    delete_non_unique_cursors();
+}
+
+
+void ImEdit::editor::cursors_move_right_token() {
+    // TODO: change for going from word to word instead of from token to token ?
+    for (auto& cursor : _cursors) {
+        if (auto glyph_count = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size() ; cursor.coord.glyph < glyph_count) {
+            cursor.coord.glyph = glyph_count;
+
+        } else if (cursor.coord.token + 1 < _lines[cursor.coord.line].tokens.size()) {
+            ++cursor.coord.token;
+            cursor.coord.glyph = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size();
+
+        } else {
+            cursor.coord = coordinates_move_left(cursor.coord); // just one right: next line
+        }
+
+        cursor.wanted_column = column_count_to(cursor.coord);
+    }
+    delete_non_unique_cursors();
+
 }
 
 unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const noexcept {
@@ -613,17 +653,29 @@ void ImEdit::editor::handle_kb_input() {
         }
 
         if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_DownArrow))) {
-            cursor_move_down();
+            cursors_move_down();
         } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_UpArrow))) {
-            cursor_move_up();
+            cursors_move_up();
         } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_LeftArrow))) {
-            cursor_move_left();
+            cursors_move_left();
         } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow))) {
-            cursor_move_right();
+            cursors_move_right();
         } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_End))) {
-            cursor_move_to_end();
+            cursors_move_to_end();
         } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Home))) {
-            cursor_move_to_beg();
+            cursors_move_to_beg();
+        }
+    }
+
+    if (ctrl && !shift && !alt) {
+        if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_DownArrow))) {
+            // TODO scroll down
+        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_UpArrow))) {
+            // TODO scroll up
+        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_LeftArrow))) {
+            cursors_move_left_token();
+        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow))) {
+            cursors_move_right_token();
         }
     }
 

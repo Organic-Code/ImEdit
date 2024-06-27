@@ -103,12 +103,14 @@ namespace ImEdit {
         void cursor_add(coordinates coords);
         void cursor_remove(coordinates coords);
 
-        void cursor_move_up();
-        void cursor_move_down();
-        void cursor_move_left();
-        void cursor_move_right();
-        void cursor_move_to_end(); // endline
-        void cursor_move_to_beg(); // begline
+        void cursors_move_up();
+        void cursors_move_down();
+        void cursors_move_left();
+        void cursors_move_right();
+        void cursors_move_to_end(); // endline
+        void cursors_move_to_beg(); // begline
+        void cursors_move_left_token(); // moves by one token to the left
+        void cursors_move_right_token(); // moves by one token to the right
 
         void clear();
 
