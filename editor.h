@@ -7,6 +7,14 @@
 #include <optional>
 #include <unordered_map>
 
+#if __has_include(<imgui.h>)
+#include <imgui.h>
+#elif __has_include(<imgui/imgui.h>)
+#include <imgui/imgui.h>
+#else
+#error "cannot include <imgui.h> or <imgui/imgui.h>"
+#endif
+
 namespace ImEdit {
 
 
