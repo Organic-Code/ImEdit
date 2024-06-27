@@ -114,6 +114,10 @@ namespace ImEdit {
 
         void delete_glyph(coordinates);
 
+        void reset_font() noexcept {
+            _glyph_size.reset();
+        }
+
         static style get_default_style();
 
         bool _allow_keyboard_input{true};
@@ -140,6 +144,8 @@ namespace ImEdit {
 
         [[nodiscard]] bool coordinates_equal(coordinates lhs, coordinates rhs) const noexcept;
 
+        [[nodiscard]] ImVec2 glyph_size() const noexcept;
+
         void delete_non_unique_cursors();
 
         void find_longest_line();
@@ -158,6 +164,8 @@ namespace ImEdit {
         float _longest_line_px{300};
 
         ImVec2 _imgui_cursor_position;
+
+        mutable std::optional<ImVec2> _glyph_size{};
     };
 }
 

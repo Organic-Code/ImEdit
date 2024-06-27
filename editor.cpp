@@ -113,7 +113,7 @@ void ImEdit::editor::render() {
     const auto draw_width = _draw_width ? *_draw_width : _longest_line_px;
     const auto draw_height = _draw_height ? *_draw_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1);
 
-    const auto space_length = ImGui::CalcTextSize(" ");
+    const auto space_length = glyph_size();
     auto imgui_cursor = ImGui::GetCursorScreenPos();
     const ImVec2 draw_region{draw_width, draw_height};
     auto draw_list = ImGui::GetWindowDrawList();
@@ -552,7 +552,7 @@ void ImEdit::editor::clear() {
 void ImEdit::editor::find_longest_line() {
     _longest_line_idx = 0;
     _longest_line_px = 0;
-    auto space_size = ImGui::CalcTextSize(" ").x;
+    auto space_size = glyph_size().x;
     for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
         float length = calc_line_size(i, space_size);
         if (length > _longest_line_px) {
@@ -783,7 +783,7 @@ void ImEdit::editor::handle_mouse_input() {
 
 ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) {
     // TODO what about folded regions?
-    auto glyph_size = ImGui::CalcTextSize(" ");
+    auto glyph_size = editor::glyph_size();
     coordinates_cbl coords;
     pos.x -= _imgui_cursor_position.x;
     pos.y -= _imgui_cursor_position.y;
@@ -802,7 +802,7 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
 }
 
 float ImEdit::editor::compute_extra_padding() const noexcept {
-    auto glyph_length = ImGui::CalcTextSize(" ").x; // TODO : cache this.
+    auto glyph_length = glyph_size().x;
     return _lines.empty() ? 5 * glyph_length : std::floor(std::log10(static_cast<float>(_lines.size())) + 4) * glyph_length;
 }
 
@@ -832,5 +832,12 @@ bool ImEdit::editor::coordinates_equal(coordinates lhs, coordinates rhs) const n
         }
         return false;
     }
+}
+
+ImVec2 ImEdit::editor::glyph_size() const noexcept {
+    if (!_glyph_size) {
+        _glyph_size = ImGui::CalcTextSize(" ");
+    }
+    return *_glyph_size;
 }
 
