@@ -429,12 +429,12 @@ void ImEdit::editor::cursors_move_left_token() {
     for (auto& cursor : _cursors) {
         if (cursor.coord.glyph > 0) {
             cursor.coord.glyph = 0;
-
-        } else if (cursor.coord.token > 0) {
+        }
+        else if (cursor.coord.token > 0) {
             --cursor.coord.token;
             // cursor.coord.glyph == 0
-
-        } else {
+        }
+        else {
             cursor.coord = coordinates_move_left(cursor.coord); // just one left: previous line
         }
 
@@ -447,15 +447,18 @@ void ImEdit::editor::cursors_move_left_token() {
 void ImEdit::editor::cursors_move_right_token() {
     // TODO: change for going from word to word instead of from token to token ?
     for (auto& cursor : _cursors) {
-        if (auto glyph_count = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size() ; cursor.coord.glyph < glyph_count) {
+        if (_lines[cursor.coord.line].tokens.empty()) {
+            cursor.coord = coordinates_move_right(cursor.coord);
+        }
+        else if (auto glyph_count = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size() ; cursor.coord.glyph < glyph_count) {
             cursor.coord.glyph = glyph_count;
-
-        } else if (cursor.coord.token + 1 < _lines[cursor.coord.line].tokens.size()) {
+        }
+        else if (cursor.coord.token + 1 < _lines[cursor.coord.line].tokens.size()) {
             ++cursor.coord.token;
             cursor.coord.glyph = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size();
-
-        } else {
-            cursor.coord = coordinates_move_left(cursor.coord); // just one right: next line
+        }
+        else {
+            cursor.coord = coordinates_move_right(cursor.coord); // just one right: next line
         }
 
         cursor.wanted_column = column_count_to(cursor.coord);
@@ -470,6 +473,10 @@ unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const no
     }
 
     assert(coord.line < _lines.size());
+    if (coord.token == 0 && _lines[coord.line].tokens.empty()) {
+        return 0;
+    }
+
     assert(coord.token < _lines[coord.line].tokens.size());
     assert(coord.glyph <= _lines[coord.line].tokens[coord.token].data.size());
 
