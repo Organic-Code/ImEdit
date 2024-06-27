@@ -1,4 +1,4 @@
-#include <iostream>
+#include <algorithm>
 #include <imgui.h>
 #include <sstream>
 #include <cctype>
@@ -490,7 +490,26 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
 }
 
 void ImEdit::editor::delete_non_unique_cursors() {
-    // TODO
+    bool delete_performed;
+    do {
+        delete_performed = false;
+
+        auto to_erase = _cursors.end();
+        for (auto it = _cursors.begin() ; it != _cursors.end() && to_erase == _cursors.end() ; ++it) {
+            for (auto it2 = std::next(it) ; it2 != _cursors.end() ; ++it2) {
+                if (coordinates_equal(it->coord, it2->coord)) {
+                    to_erase = it;
+                    break;
+                }
+            }
+        }
+
+        if (to_erase != _cursors.end()) {
+            delete_performed = true;
+            _cursors.erase(to_erase);
+        }
+
+    } while (delete_performed);
 }
 
 void ImEdit::editor::cursor_add(ImEdit::coordinates coords) {
@@ -503,7 +522,21 @@ void ImEdit::editor::cursor_add(ImEdit::coordinates coords) {
 }
 
 void ImEdit::editor::cursor_remove(ImEdit::coordinates coords) {
-    // TODO
+    auto cursor_it = _cursors.end();
+    for (auto it = _cursors.begin() ; it != _cursors.end() ; ++it) {
+        if (coordinates_equal(coords, it->coord)) {
+            cursor_it = it;
+            break;
+        }
+    }
+
+    if (cursor_it != _cursors.end()) {
+        _cursors.erase(cursor_it);
+        if (_cursors.empty()) {
+            _cursors.emplace_back();
+        }
+    }
+
 }
 
 void ImEdit::editor::clear() {
@@ -734,8 +767,15 @@ void ImEdit::editor::handle_mouse_input() {
             _cursors.clear();
             _cursors.push_back({new_cursor_coords, column_count_to(new_cursor_coords)});
         } else {
-            // todo : delete cursor if already present there, instead of adding one
-            _cursors.push_back({new_cursor_coords, column_count_to(new_cursor_coords)});
+
+            auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &new_cursor_coords](const cursor& cursor) {
+                return coordinates_equal(cursor.coord, new_cursor_coords);
+            });
+            if (it == _cursors.end()) {
+                _cursors.push_back({new_cursor_coords, column_count_to(new_cursor_coords)});
+            } else if (_cursors.size() > 1) { // don’t erase last cursor
+                _cursors.erase(it);
+            }
         }
     }
 }
@@ -764,3 +804,32 @@ float ImEdit::editor::compute_extra_padding() const noexcept {
     auto glyph_length = ImGui::CalcTextSize(" ").x; // TODO : cache this.
     return _lines.empty() ? 5 * glyph_length : std::floor(std::log10(static_cast<float>(_lines.size())) + 4) * glyph_length;
 }
+
+bool ImEdit::editor::coordinates_equal(coordinates lhs, coordinates rhs) const noexcept {
+    if (lhs.line != rhs.line) {
+        return false;
+    }
+
+    if (lhs.token == rhs.token) {
+        if (lhs.glyph == rhs.glyph) {
+            return true;
+        }
+        return false;
+
+    } else {
+        // adjacent tokens: if left token is the end of token, right is at idx 0 -> coordinates are still equal
+        if (lhs.token > rhs.token) {
+            std::swap(lhs, rhs);
+        }
+
+        if (lhs.token + 1 != rhs.token) {
+            return false;
+        }
+
+        if (lhs.glyph == _lines[lhs.line].tokens[lhs.token].data.size() && rhs.glyph == 0) {
+            return true;
+        }
+        return false;
+    }
+}
+

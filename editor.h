@@ -87,6 +87,7 @@ namespace ImEdit {
         void render();
         void set_data(const std::string& data);
         void set_data(std::deque<line> lines) {
+            clear();
             _lines = std::move(lines);
         }
 
@@ -136,6 +137,8 @@ namespace ImEdit {
         [[nodiscard]] coordinates coordinates_move_right(coordinates) const noexcept;
 
         [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos);
+
+        [[nodiscard]] bool coordinates_equal(coordinates lhs, coordinates rhs) const noexcept;
 
         void delete_non_unique_cursors();
 
