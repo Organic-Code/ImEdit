@@ -689,6 +689,8 @@ void ImEdit::editor::delete_glyph(coordinates co) {
             if (c.coord.line == co.line) {
                 --c.coord.line;
                 c.coord.token += original_line_tok_count;
+            } else if (c.coord.line > co.line) {
+                --c.coord.line;
             }
         }
 
@@ -702,8 +704,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
     // Deleting a regular glyph
 
         for (cursor& cursor : _cursors) {
-            if (cursor.coord.line == co.line && (cursor.coord.token > co.token ||
-                                                 cursor.coord.token == co.token && cursor.coord.glyph >= co.glyph)) {
+            if (cursor.coord.line == co.line && cursor.coord.token == co.token && cursor.coord.glyph >= co.glyph) {
                 cursor.coord = coordinates_move_left(cursor.coord);
             }
         }
