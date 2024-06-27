@@ -87,10 +87,15 @@ namespace ImEdit {
         unsigned int wanted_column{}; // where the cursor wishes to be at (can be more to the right than possible on a given line)
     };
 
+    struct region {
+        coordinates beg{};
+        coordinates end{};
+    };
+
 
     class editor {
     public:
-        editor();
+        editor(std::string id);
 
         void render();
         void set_data(const std::string& data);
@@ -99,11 +104,13 @@ namespace ImEdit {
             _lines = std::move(lines);
         }
 
+        void selection_set(region r) noexcept;
+
         [[nodiscard]] style& get_style() noexcept {
             return _style;
         }
 
-        [[nodiscard]] std::string_view store_tooltip(std::string tooltip) {
+        [[nodiscard]] std::string_view tooltip_store(std::string tooltip) {
             _tooltips.push_back(std::move(tooltip));
             return _tooltips.back();
         }
@@ -152,7 +159,9 @@ namespace ImEdit {
 
         [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos);
 
-        [[nodiscard]] bool coordinates_equal(coordinates lhs, coordinates rhs) const noexcept;
+        [[nodiscard]] bool coordinates_eq(coordinates lhs, coordinates rhs) const noexcept;
+        [[nodiscard]] bool coordinates_lt(coordinates lhs, coordinates rhs) const noexcept;
+        [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
 
         [[nodiscard]] ImVec2 glyph_size() const noexcept;
 
@@ -173,7 +182,10 @@ namespace ImEdit {
         unsigned int _longest_line_idx{};
         float _longest_line_px{300};
 
-        ImVec2 _imgui_cursor_position;
+        ImVec2 _imgui_cursor_position{};
+        std::optional<region> _selection{};
+
+        const std::string _imgui_id;
 
         mutable std::optional<ImVec2> _glyph_size{};
     };

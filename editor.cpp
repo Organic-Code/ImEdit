@@ -94,7 +94,11 @@ void ImEdit::editor::set_data(const std::string &data) {
     // TODO: call lexer function
 }
 
+#include <imgui_internal.h>
+
 void ImEdit::editor::render() {
+    ImGui::PushID(_imgui_id.c_str());
+
     _imgui_cursor_position = ImGui::GetCursorScreenPos();
 
     // TODO: wrapping
@@ -154,6 +158,75 @@ void ImEdit::editor::render() {
         if (line.background) {
             draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x,
                                                     imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()}, *line.background);
+        }
+
+        // Drawing selected region
+        if (_selection) {
+            coordinates min, max;
+            if (coordinates_lt(_selection->beg, _selection->end)) {
+                min = _selection->beg;
+                max = _selection->end;
+            } else {
+                min = _selection->end;
+                max = _selection->beg;
+            }
+
+            std::optional<ImVec2> select_draw_start, select_draw_end;
+            if (min.line == i) {
+                if (max.line == i) {
+                    // selected = [column(min), column(max)]
+                    if (min.token != 0 || min.glyph != 0) {
+                        select_draw_start = {
+                                imgui_cursor.x + static_cast<float>(column_count_to(coordinates_move_left(min))) * glyph_size().x,
+                                imgui_cursor.y
+                        };
+                    } else {
+                        select_draw_start = imgui_cursor;
+                    }
+                    select_draw_end = {
+                            imgui_cursor.x + static_cast<float>(column_count_to(max)) * glyph_size().x,
+                            imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
+                    };
+                }
+                else {
+                    // selected = [column(min), end_of_line]
+                    if (min.token != 0 || min.glyph != 0) {
+                        select_draw_start = {
+                                imgui_cursor.x + static_cast<float>(column_count_to(coordinates_move_left(min))) * glyph_size().x,
+                                imgui_cursor.y
+                        };
+                    } else {
+                        select_draw_start = imgui_cursor;
+                    }
+                    select_draw_end = {
+                            imgui_cursor.x + draw_region.x,
+                            imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
+                    };
+                }
+            } else if (min.line < i) {
+                if (max.line == i) {
+                    // selected = [start_of_line, column(max)]
+                    select_draw_start = imgui_cursor;
+                    select_draw_end = {
+                            imgui_cursor.x + static_cast<float>(column_count_to(max)) * glyph_size().x,
+                            imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
+                    };
+                }
+                else if (max.line > i) {
+                    //selected = [start_of_line, end_of_line]
+                    select_draw_start = imgui_cursor;
+                    select_draw_end = {
+                            imgui_cursor.x + draw_region.x,
+                            imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
+                    };
+                }
+
+            }
+
+            if (select_draw_start) {
+                assert(select_draw_end);
+                draw_list->AddRectFilled(*select_draw_start, *select_draw_end, _style.selection_color);
+            }
         }
 
         // TODO: scrolling : ne pas tout rendre ?
@@ -244,23 +317,30 @@ void ImEdit::editor::render() {
         imgui_cursor.x = _imgui_cursor_position.x;
         imgui_cursor.y += ImGui::GetTextLineHeightWithSpacing();
     }
+
     ImGui::Dummy(
             {std::max(draw_region.x + extra_padding, max_line_width + 2),
              draw_region.y}
     );
+
     if (ImGui::IsItemHovered()) {
+        ImGui::SetHoveredID(ImGui::GetCurrentWindow()->GetID(_imgui_id.c_str()));
         ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
     }
 
     if (_allow_keyboard_input) {
         ImGui::PopAllowKeyboardFocus();
     }
+
+    ImGui::PopID();
 }
 
 
-ImEdit::editor::editor() :
+
+ImEdit::editor::editor(std::string id) :
         _lines{},
-        _style{get_default_style()}
+        _style{get_default_style()},
+        _imgui_id{std::move(id)}
 {
     _cursors.emplace_back();
 }
@@ -297,12 +377,14 @@ void ImEdit::editor::cursors_move_up() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_up(cursor.coord, cursor.wanted_column);
     }
+    _selection.reset();
     delete_non_unique_cursors();
 }
 void ImEdit::editor::cursors_move_down() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_down(cursor.coord, cursor.wanted_column);
     }
+    _selection.reset();
     delete_non_unique_cursors();
 }
 void ImEdit::editor::cursors_move_left() {
@@ -310,6 +392,7 @@ void ImEdit::editor::cursors_move_left() {
         cursor.coord = coordinates_move_left(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
+    _selection.reset();
     delete_non_unique_cursors();
 }
 void ImEdit::editor::cursors_move_right() {
@@ -317,6 +400,7 @@ void ImEdit::editor::cursors_move_right() {
         cursor.coord = coordinates_move_right(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
+    _selection.reset();
     delete_non_unique_cursors();
 }
 
@@ -412,6 +496,7 @@ void ImEdit::editor::cursors_move_to_end() {
             cursor.wanted_column = column_count_to(cursor.coord);
         }
     }
+    _selection.reset();
     delete_non_unique_cursors();
 }
 
@@ -421,6 +506,7 @@ void ImEdit::editor::cursors_move_to_beg() {
         cursor.coord.glyph = 0;
         cursor.wanted_column = 0;
     }
+    _selection.reset();
     delete_non_unique_cursors();
 }
 
@@ -440,12 +526,13 @@ void ImEdit::editor::cursors_move_left_token() {
 
         cursor.wanted_column = column_count_to(cursor.coord);
     }
+    _selection.reset();
     delete_non_unique_cursors();
 }
 
 
 void ImEdit::editor::cursors_move_right_token() {
-    // TODO: change for going from word to word instead of from token to token ?
+    // TODO: change for going from word to word instead of from token to token ? Or let this be decided by the lexer ?
     for (auto& cursor : _cursors) {
         if (_lines[cursor.coord.line].tokens.empty()) {
             cursor.coord = coordinates_move_right(cursor.coord);
@@ -463,6 +550,7 @@ void ImEdit::editor::cursors_move_right_token() {
 
         cursor.wanted_column = column_count_to(cursor.coord);
     }
+    _selection.reset();
     delete_non_unique_cursors();
 
 }
@@ -543,7 +631,7 @@ void ImEdit::editor::delete_non_unique_cursors() {
         auto to_erase = _cursors.end();
         for (auto it = _cursors.begin() ; it != _cursors.end() && to_erase == _cursors.end() ; ++it) {
             for (auto it2 = std::next(it) ; it2 != _cursors.end() ; ++it2) {
-                if (coordinates_equal(it->coord, it2->coord)) {
+                if (coordinates_eq(it->coord, it2->coord)) {
                     to_erase = it;
                     break;
                 }
@@ -570,7 +658,7 @@ void ImEdit::editor::cursor_add(ImEdit::coordinates coords) {
 void ImEdit::editor::cursor_remove(ImEdit::coordinates coords) {
     auto cursor_it = _cursors.end();
     for (auto it = _cursors.begin() ; it != _cursors.end() ; ++it) {
-        if (coordinates_equal(coords, it->coord)) {
+        if (coordinates_eq(coords, it->coord)) {
             cursor_it = it;
             break;
         }
@@ -808,9 +896,33 @@ void ImEdit::editor::handle_mouse_input() {
         return;
     }
 
+    if (ImGui::IsMouseDragging(0)) {
+        auto coord = screen_to_token_coordinates(ImGui::GetMousePos());
+        if (coord.is_left) {
+            coord.token = coord.glyph = 0;
+        }
+        // left click dragging = update selection
+        if (!_selection) {
+            _selection.emplace();
+            _selection->beg = _selection->end = {coord.line, coord.token, coord.glyph};
+        }
+        else {
+            _selection->end = {coord.line, coord.token, coord.glyph};
+        }
+
+        _cursors.clear();
+        _cursors.emplace_back();
+        _cursors.back().coord = {coord.line, coord.token, coord.glyph};
+        _cursors.back().wanted_column = column_count_to(_cursors.back().coord);
+
+        return;
+    }
+
     if (!ImGui::IsMouseClicked(0)) {
         return;
     }
+    _selection.reset();
+    ImGui::SetWindowFocus(); // Left click inputed : we take focus if we didn’t already have it
 
     ImGuiIO& im_io = ImGui::GetIO();
     const bool alt = im_io.ConfigMacOSXBehaviors ? im_io.KeyCtrl : im_io.KeyAlt;
@@ -828,7 +940,7 @@ void ImEdit::editor::handle_mouse_input() {
         } else {
 
             auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &new_cursor_coords](const cursor& cursor) {
-                return coordinates_equal(cursor.coord, new_cursor_coords);
+                return coordinates_eq(cursor.coord, new_cursor_coords);
             });
             if (it == _cursors.end()) {
                 _cursors.push_back({new_cursor_coords, column_count_to(new_cursor_coords)});
@@ -864,7 +976,7 @@ float ImEdit::editor::compute_extra_padding() const noexcept {
     return _lines.empty() ? 5 * glyph_length : std::floor(std::log10(static_cast<float>(_lines.size())) + 4) * glyph_length;
 }
 
-bool ImEdit::editor::coordinates_equal(coordinates lhs, coordinates rhs) const noexcept {
+bool ImEdit::editor::coordinates_eq(coordinates lhs, coordinates rhs) const noexcept {
     if (lhs.line != rhs.line) {
         return false;
     }
@@ -892,10 +1004,59 @@ bool ImEdit::editor::coordinates_equal(coordinates lhs, coordinates rhs) const n
     }
 }
 
+bool ImEdit::editor::coordinates_lt(coordinates lhs, coordinates rhs) const noexcept {
+    if (lhs.line < rhs.line) {
+        return true;
+    }
+    if (lhs.line > rhs.line) {
+        return false;
+    }
+
+    // same line
+
+    if (lhs.token < rhs.token) {
+        // need to check if same position, lhs on the end of their token and rhs on the start of their token, with lhs next to rhs
+        if (lhs.token + 1 != rhs.token) {
+            return true;
+        }
+        else {
+            if (lhs.glyph == _lines[lhs.line].tokens[lhs.token].data.size() && rhs.glyph == 0) {
+                return false;
+            }
+            else {
+                return true;
+            }
+        }
+    }
+    if (lhs.token > rhs.token) {
+        return false;
+    }
+
+    // same token
+
+    if (lhs.glyph < rhs.glyph) {
+        return true;
+    }
+    else {
+        return false;
+    }
+}
+
+bool ImEdit::editor::coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept {
+    return coordinates_lt(lhs, rhs) || coordinates_eq(lhs, rhs);
+}
+
 ImVec2 ImEdit::editor::glyph_size() const noexcept {
     if (!_glyph_size) {
         _glyph_size = ImGui::CalcTextSize(" ");
     }
     return *_glyph_size;
+}
+
+void ImEdit::editor::selection_set(ImEdit::region r) noexcept {
+    if (coordinates_lt(r.end, r.beg)) {
+        std::swap(r.beg, r.end);
+    }
+    _selection = r;
 }
 
