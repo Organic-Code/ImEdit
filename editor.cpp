@@ -227,7 +227,7 @@ void ImEdit::editor::render() {
 
 
         for (const auto & token : line.tokens) {
-            if (imgui_cursor.x >= draw_region.x + _imgui_cursor_position.x) {
+            if (imgui_cursor.x >= draw_region.x + _imgui_cursor_position.x + extra_padding) {
                 break;
             }
 
@@ -272,7 +272,7 @@ void ImEdit::editor::render() {
 
                 is_leading_space = false;
                 draw_list->AddText(imgui_cursor, color, data.data(), data.data() + data.size());
-                auto text_size = ImGui::CalcTextSize(data.data(), data.data() + data.size());
+                auto text_size = calc_text_size(data.data(), data.data() + data.size());
                 if (!token.tooltip.empty()) {
                     if (ImGui::IsMouseHoveringRect(imgui_cursor, imgui_cursor + text_size)) {
                         ImGui::BeginTooltip();
@@ -1029,7 +1029,7 @@ bool ImEdit::editor::coordinates_lt_eq(coordinates lhs, coordinates rhs) const n
 
 ImVec2 ImEdit::editor::glyph_size() const noexcept {
     if (!_glyph_size) {
-        _glyph_size = ImGui::CalcTextSize(" ");
+        _glyph_size = calc_text_size(" ");
     }
     return *_glyph_size;
 }
@@ -1039,5 +1039,10 @@ void ImEdit::editor::selection_set(ImEdit::region r) noexcept {
         std::swap(r.beg, r.end);
     }
     _selection = r;
+}
+
+ImVec2 ImEdit::editor::calc_text_size(const char *text, const char *text_end) noexcept {
+    auto font = ImGui::GetFont();
+    return font->CalcTextSizeA(font->FontSize, FLT_MAX, -1.f, text, text_end, nullptr);
 }
 

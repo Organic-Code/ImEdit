@@ -106,9 +106,7 @@ namespace ImEdit {
 
         void selection_set(region r) noexcept;
 
-        [[nodiscard]] style& get_style() noexcept {
-            return _style;
-        }
+        [[nodiscard]] style& get_style() noexcept { return _style; }
 
         [[nodiscard]] std::string_view tooltip_store(std::string tooltip) {
             _tooltips.push_back(std::move(tooltip));
@@ -164,6 +162,8 @@ namespace ImEdit {
         [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
 
         [[nodiscard]] ImVec2 glyph_size() const noexcept;
+
+        [[nodiscard]] static ImVec2 calc_text_size(const char* text, const char* text_end = nullptr) noexcept;
 
         void delete_non_unique_cursors();
 
