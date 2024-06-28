@@ -176,7 +176,7 @@ void ImEdit::editor::render() {
         }
 
         // Drawing selected region
-        if (_selection) {
+        if (_selection && !coordinates_eq(_selection->beg, _selection->end)) {
             coordinates min, max;
             if (coordinates_lt(_selection->beg, _selection->end)) {
                 min = _selection->beg;
@@ -192,7 +192,7 @@ void ImEdit::editor::render() {
                     // selected = [column(min), column(max)]
                     if (min.token != 0 || min.glyph != 0) {
                         select_draw_start = {
-                                imgui_cursor.x + static_cast<float>(column_count_to(coordinates_move_left(min))) * glyph_size().x,
+                                imgui_cursor.x + static_cast<float>(column_count_to(min)) * glyph_size().x,
                                 imgui_cursor.y
                         };
                     } else {
@@ -207,7 +207,7 @@ void ImEdit::editor::render() {
                     // selected = [column(min), end_of_line]
                     if (min.token != 0 || min.glyph != 0) {
                         select_draw_start = {
-                                imgui_cursor.x + static_cast<float>(column_count_to(coordinates_move_left(min))) * glyph_size().x,
+                                imgui_cursor.x + static_cast<float>(column_count_to(min)) * glyph_size().x,
                                 imgui_cursor.y
                         };
                     } else {
@@ -682,6 +682,7 @@ void ImEdit::editor::clear() {
     _cursors.clear();
     _tooltips.clear();
     _lines.clear();
+    _last_frame_mouse_coords.reset();
     _longest_line_idx = 0;
     _longest_line_px = 0;
 
@@ -902,50 +903,48 @@ void ImEdit::editor::handle_mouse_input() {
     }
 
     ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+    auto mouse_coord = screen_to_token_coordinates(ImGui::GetMousePos());
 
-    if (ImGui::IsMouseDragging(0)) {
-        auto coord = screen_to_token_coordinates(ImGui::GetMousePos());
-        if (coord.is_left) {
-            coord.token = coord.glyph = 0;
+    if (ImGui::IsMouseDragging(0) && _last_frame_mouse_coords) {
+        if (mouse_coord.is_left) {
+            mouse_coord.token = mouse_coord.glyph = 0;
         }
+        coordinates coord = mouse_coord.as_default_coords();
+
         // left click dragging = update selection
         if (!_selection) {
             _selection.emplace();
-            _selection->beg = _selection->end = {coord.line, coord.token, coord.glyph};
+            coordinates previous_coord = _last_frame_mouse_coords->as_default_coords();
+            if (_last_frame_mouse_coords->is_left) {
+                previous_coord.token = previous_coord.glyph = 0;
+            }
+            _selection->beg = previous_coord;
+            _selection->end = coord;
         }
         else {
-            _selection->end = {coord.line, coord.token, coord.glyph};
+            _selection->end = coord;
         }
 
         _cursors.clear();
-        _cursors.emplace_back();
-        _cursors.back().coord = {coord.line, coord.token, coord.glyph};
-        _cursors.back().wanted_column = column_count_to(_cursors.back().coord);
-
-        return;
+        _cursors.push_back({coord, column_count_to(coord)});
     }
 
-    if (!ImGui::IsMouseClicked(0)) {
-        return;
-    }
-    _selection.reset();
+    if (ImGui::IsMouseClicked(0)) {
 
-    ImGuiIO& im_io = ImGui::GetIO();
-    const bool alt = im_io.ConfigMacOSXBehaviors ? im_io.KeyCtrl : im_io.KeyAlt;
-    const bool ctrl = im_io.ConfigMacOSXBehaviors ? im_io.KeyAlt : im_io.KeyCtrl;
-    const bool shift = im_io.KeyShift;
+        _selection.reset();
 
-    auto mouse_coord = screen_to_token_coordinates(ImGui::GetMousePos());
-    if (!mouse_coord.is_left) {
-        coordinates new_cursor_coords = {
-                mouse_coord.line, mouse_coord.token, mouse_coord.glyph
-        };
+        ImGuiIO &im_io = ImGui::GetIO();
+        const bool alt = im_io.ConfigMacOSXBehaviors ? im_io.KeyCtrl : im_io.KeyAlt;
+        const bool ctrl = im_io.ConfigMacOSXBehaviors ? im_io.KeyAlt : im_io.KeyCtrl;
+        const bool shift = im_io.KeyShift;
+
+        coordinates new_cursor_coords = mouse_coord.as_default_coords();
         if (!alt || !shift) {
             _cursors.clear();
             _cursors.push_back({new_cursor_coords, column_count_to(new_cursor_coords)});
         } else {
 
-            auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &new_cursor_coords](const cursor& cursor) {
+            auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &new_cursor_coords](const cursor &cursor) {
                 return coordinates_eq(cursor.coord, new_cursor_coords);
             });
             if (it == _cursors.end()) {
@@ -955,6 +954,8 @@ void ImEdit::editor::handle_mouse_input() {
             }
         }
     }
+
+    _last_frame_mouse_coords = mouse_coord;
 }
 
 ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) {
@@ -968,9 +969,15 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
 
     auto line = std::min(static_cast<unsigned>(std::round((pos.y - 3)/ ImGui::GetTextLineHeightWithSpacing())),
                          static_cast<unsigned>(_lines.size() - 1));
+    coords.line = line;
+
+    if (pos.x < 0) {
+        coords.is_left = true;
+        coords.token = coords.glyph = 0;
+        return coords;
+    }
     auto base_coords = coordinates_for(static_cast<unsigned>(std::round(pos.x / glyph_size.x)), line);
 
-    coords.line = base_coords.line;
     coords.token = base_coords.token;
     coords.glyph = base_coords.glyph;
 

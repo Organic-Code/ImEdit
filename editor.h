@@ -105,6 +105,10 @@ namespace ImEdit {
     // used to represent coordinates that can be to the left of the glyphs (in the numbers column)
     struct coordinates_cbl : coordinates {
         bool is_left{false}; // true: token == 0, glyph indicates how many glyphs to the left the coord is.
+
+        [[nodiscard]] coordinates as_default_coords() const noexcept {
+            return {line, token, glyph};
+        }
     };
 
     struct cursor {
@@ -204,8 +208,10 @@ namespace ImEdit {
         std::deque<line> _lines{};
         style _style{};
 
+        std::optional<coordinates_cbl> _last_frame_mouse_coords{};
+
         unsigned int _longest_line_idx{};
-        float _longest_line_px{300};
+        float _longest_line_px{};
 
         ImVec2 _imgui_cursor_position{};
         std::optional<region> _selection{};
