@@ -107,10 +107,6 @@ void ImEdit::editor::render() {
     }
 
     handle_kb_input();
-    if (_allow_keyboard_input) {
-        ImGui::PushAllowKeyboardFocus(true);
-    }
-
     handle_mouse_input();
 
     const auto draw_width = _draw_width ? *_draw_width : _longest_line_px;
@@ -329,7 +325,6 @@ void ImEdit::editor::render() {
     }
 
     if (_allow_keyboard_input) {
-        ImGui::PopAllowKeyboardFocus();
     }
 
     ImGui::PopID();
@@ -729,7 +724,7 @@ void ImEdit::editor::handle_kb_input() {
     const bool shift = im_io.KeyShift;
 
     if (!ctrl && !shift && !alt) {
-        if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Delete))) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
             for (cursor &cursor: _cursors) {
                 // check if we are at the last char, in which case we do nothing
                 if (cursor.coord.line == _lines.size() - 1 && cursor.coord.token == _lines.back().tokens.size() - 1 &&
@@ -740,35 +735,35 @@ void ImEdit::editor::handle_kb_input() {
             }
         }
 
-        if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Backspace))) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
             for (cursor &cursor: _cursors) {
                 delete_glyph(cursor.coord);
             }
         }
 
-        if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_DownArrow))) {
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
             cursors_move_down();
-        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_UpArrow))) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
             cursors_move_up();
-        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_LeftArrow))) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
             cursors_move_left();
-        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow))) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
             cursors_move_right();
-        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_End))) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_End)) {
             cursors_move_to_end();
-        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_Home))) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_Home)) {
             cursors_move_to_beg();
         }
     }
 
     if (ctrl && !shift && !alt) {
-        if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_DownArrow))) {
+        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
             // TODO scroll down
-        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_UpArrow))) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
             // TODO scroll up
-        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_LeftArrow))) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
             cursors_move_left_token();
-        } else if (ImGui::IsKeyPressed(ImGui::GetKeyIndex(ImGuiKey_RightArrow))) {
+        } else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
             cursors_move_right_token();
         }
     }
