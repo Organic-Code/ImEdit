@@ -136,7 +136,7 @@ void ImEdit::editor::render() {
 
         assert(!_cursors.empty());
         if (_cursors.back().coord.line == i) {
-            draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x,
+            draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x + extra_padding,
                                                     imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
                                      _style.current_line_color);
         }
