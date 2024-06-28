@@ -94,10 +94,7 @@ void ImEdit::editor::set_data(const std::string &data) {
     // TODO: call lexer function
 }
 
-#include <imgui_internal.h>
-
 void ImEdit::editor::render() {
-    ImGui::PushID(_imgui_id.c_str());
 
     _imgui_cursor_position = ImGui::GetCursorScreenPos();
 
@@ -105,9 +102,6 @@ void ImEdit::editor::render() {
     if (_longest_line_px == 0) {
         find_longest_line();
     }
-
-    handle_kb_input();
-    handle_mouse_input();
 
     const auto draw_width = _draw_width ? *_draw_width : _longest_line_px;
     const auto draw_height = _draw_height ? *_draw_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1);
@@ -314,20 +308,11 @@ void ImEdit::editor::render() {
         imgui_cursor.y += ImGui::GetTextLineHeightWithSpacing();
     }
 
-    ImGui::Dummy(
-            {std::max(draw_region.x + extra_padding, max_line_width + 2),
-             draw_region.y}
-    );
 
-    if (ImGui::IsItemHovered()) {
-        ImGui::SetHoveredID(ImGui::GetCurrentWindow()->GetID(_imgui_id.c_str()));
-        ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
-    }
-
-    if (_allow_keyboard_input) {
-    }
-
-    ImGui::PopID();
+    ImGui::InvisibleButton(_imgui_id.c_str(),
+                           {std::max(draw_region.x + extra_padding, max_line_width + 2), draw_region.y});
+    handle_mouse_input();
+    handle_kb_input();
 }
 
 
@@ -887,9 +872,11 @@ void ImEdit::editor::delete_glyph(coordinates co) {
 }
 
 void ImEdit::editor::handle_mouse_input() {
-    if (!_allow_mouse_input || !ImGui::IsWindowHovered()) {
+    if (!_allow_mouse_input || !ImGui::IsItemHovered()) {
         return;
     }
+
+    ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
 
     if (ImGui::IsMouseDragging(0)) {
         auto coord = screen_to_token_coordinates(ImGui::GetMousePos());
@@ -917,7 +904,6 @@ void ImEdit::editor::handle_mouse_input() {
         return;
     }
     _selection.reset();
-    ImGui::SetWindowFocus(); // Left click inputed : we take focus if we didn’t already have it
 
     ImGuiIO& im_io = ImGui::GetIO();
     const bool alt = im_io.ConfigMacOSXBehaviors ? im_io.KeyCtrl : im_io.KeyAlt;
