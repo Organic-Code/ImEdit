@@ -123,7 +123,7 @@ void ImEdit::editor::render() {
 
     _imgui_cursor_position = ImGui::GetCursorScreenPos();
 
-    // TODO: wrapping
+    // TODO: wrapping (use BeginChild?)
     if (_longest_line_px == 0) {
         find_longest_line();
     }
@@ -144,7 +144,13 @@ void ImEdit::editor::render() {
                              _style.background_color);
 
 
-    float max_line_width = 0.f;
+
+    ImGui::InvisibleButton(_imgui_id.c_str(),
+                           {std::max(draw_region.x + extra_padding, _longest_line_px), draw_region.y});
+    handle_mouse_input();
+    handle_kb_input();
+
+
     auto line_numbers_max_glyphs = std::to_string(_lines.size()).size();
     for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
         const line& line = _lines[i];
@@ -299,9 +305,9 @@ void ImEdit::editor::render() {
                 draw_list->AddText(imgui_cursor, color, data.data(), data.data() + data.size());
                 auto text_size = calc_text_size(data.data(), data.data() + data.size());
                 if (!token.tooltip.empty()) {
-                    if (ImGui::IsMouseHoveringRect(imgui_cursor, imgui_cursor + text_size)) {
+                    if (ImGui::IsMouseHoveringRect(imgui_cursor, imgui_cursor + text_size) && ImGui::IsItemHovered()) {
                         ImGui::BeginTooltip();
-                        ImGui::Text("%s", token.tooltip.data());
+                        ImGui::Text("%s", token.tooltip.data()); // TODO
                         ImGui::EndTooltip();
                     }
                 }
@@ -328,16 +334,9 @@ void ImEdit::editor::render() {
             }
         }
 
-        max_line_width = std::max(max_line_width, imgui_cursor.x - _imgui_cursor_position.x);
         imgui_cursor.x = _imgui_cursor_position.x;
         imgui_cursor.y += ImGui::GetTextLineHeightWithSpacing();
     }
-
-
-    ImGui::InvisibleButton(_imgui_id.c_str(),
-                           {std::max(draw_region.x + extra_padding, max_line_width + 2), draw_region.y});
-    handle_mouse_input();
-    handle_kb_input();
 }
 
 
@@ -808,6 +807,12 @@ void ImEdit::editor::handle_kb_input() {
 void ImEdit::editor::delete_glyph(coordinates co) {
     // nothing to delete
     if (co.token == 0 && co.glyph == 0 && co.line == 0) {
+        return;
+    }
+
+    // check if we are at the last char, in which case we do nothing
+    if (co.line == _lines.size() - 1 && co.token == _lines.back().tokens.size() - 1 &&
+        co.glyph == _lines.back().tokens.back().data.size()) {
         return;
     }
 
