@@ -199,14 +199,18 @@ void ImEdit::editor::render() {
         }
 
         // Drawing selected region
-        if (_selection && !coordinates_eq(_selection->beg, _selection->end)) {
+        for (region select : _selections) {
+            if (coordinates_eq(select.beg, select.end)) {
+                continue;
+            }
+
             coordinates min, max;
-            if (coordinates_lt(_selection->beg, _selection->end)) {
-                min = _selection->beg;
-                max = _selection->end;
+            if (coordinates_lt(select.beg, select.end)) {
+                min = select.beg;
+                max = select.end;
             } else {
-                min = _selection->end;
-                max = _selection->beg;
+                min = select.end;
+                max = select.beg;
             }
 
             std::optional<ImVec2> select_draw_start, select_draw_end;
@@ -225,8 +229,7 @@ void ImEdit::editor::render() {
                             imgui_cursor.x + static_cast<float>(column_count_to(max)) * glyph_size().x,
                             imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
                     };
-                }
-                else {
+                } else {
                     // selected = [column(min), end_of_line]
                     if (min.token != 0 || min.glyph != 0) {
                         select_draw_start = {
@@ -249,8 +252,7 @@ void ImEdit::editor::render() {
                             imgui_cursor.x + static_cast<float>(column_count_to(max)) * glyph_size().x,
                             imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
                     };
-                }
-                else if (max.line > i) {
+                } else if (max.line > i) {
                     //selected = [start_of_line, end_of_line]
                     select_draw_start = imgui_cursor;
                     select_draw_end = {
@@ -400,31 +402,31 @@ void ImEdit::editor::cursors_move_up() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_up(cursor.coord, cursor.wanted_column);
     }
-    _selection.reset();
-    delete_non_unique_cursors();
+    _selections.clear();
+    manage_extra_cursors();
 }
 void ImEdit::editor::cursors_move_down() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_down(cursor.coord, cursor.wanted_column);
     }
-    _selection.reset();
-    delete_non_unique_cursors();
+    _selections.clear();
+    manage_extra_cursors();
 }
 void ImEdit::editor::cursors_move_left() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_left(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
-    _selection.reset();
-    delete_non_unique_cursors();
+    _selections.clear();
+    manage_extra_cursors();
 }
 void ImEdit::editor::cursors_move_right() {
     for (auto& cursor : _cursors) {
         cursor.coord = coordinates_move_right(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
-    _selection.reset();
-    delete_non_unique_cursors();
+    _selections.clear();
+    manage_extra_cursors();
 }
 
 
@@ -519,8 +521,8 @@ void ImEdit::editor::cursors_move_to_end() {
             cursor.wanted_column = column_count_to(cursor.coord);
         }
     }
-    _selection.reset();
-    delete_non_unique_cursors();
+    _selections.clear();
+    manage_extra_cursors();
 }
 
 void ImEdit::editor::cursors_move_to_beg() {
@@ -529,8 +531,8 @@ void ImEdit::editor::cursors_move_to_beg() {
         cursor.coord.glyph = 0;
         cursor.wanted_column = 0;
     }
-    _selection.reset();
-    delete_non_unique_cursors();
+    _selections.clear();
+    manage_extra_cursors();
 }
 
 void ImEdit::editor::cursors_move_left_token() {
@@ -549,8 +551,8 @@ void ImEdit::editor::cursors_move_left_token() {
 
         cursor.wanted_column = column_count_to(cursor.coord);
     }
-    _selection.reset();
-    delete_non_unique_cursors();
+    _selections.clear();
+    manage_extra_cursors();
 }
 
 
@@ -573,8 +575,8 @@ void ImEdit::editor::cursors_move_right_token() {
 
         cursor.wanted_column = column_count_to(cursor.coord);
     }
-    _selection.reset();
-    delete_non_unique_cursors();
+    _selections.clear();
+    manage_extra_cursors();
 
 }
 
@@ -655,7 +657,10 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
     return coord;
 }
 
-void ImEdit::editor::delete_non_unique_cursors() {
+void ImEdit::editor::manage_extra_cursors() {
+
+    // TODO : Merge selections together and delete cursors accordingly
+
     bool delete_performed;
     do {
         delete_performed = false;
@@ -684,7 +689,7 @@ void ImEdit::editor::cursor_add(ImEdit::coordinates coords) {
     assert(coords.glyph <= _lines[coords.line].tokens[coords.token].data.size());
 
     _cursors.push_back({coords, column_count_to(coords)});
-    delete_non_unique_cursors();
+    manage_extra_cursors();
 }
 
 void ImEdit::editor::cursor_remove(ImEdit::coordinates coords) {
@@ -763,19 +768,22 @@ void ImEdit::editor::handle_kb_input() {
 
     if (!ctrl && !shift && !alt) {
         if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
-            for (cursor &cursor: _cursors) {
-                // check if we are at the last char, in which case we do nothing
-                if (cursor.coord.line == _lines.size() - 1 && cursor.coord.token == _lines.back().tokens.size() - 1 &&
-                    cursor.coord.glyph == _lines.back().tokens.back().data.size()) {
-                    continue;
+            if (!_selections.empty()) {
+                delete_selections();
+            } else {
+                for (cursor &cursor: _cursors) {
+                    delete_glyph(coordinates_move_right(cursor.coord));
                 }
-                delete_glyph(coordinates_move_right(cursor.coord));
             }
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
-            for (cursor &cursor: _cursors) {
-                delete_glyph(cursor.coord);
+            if (!_selections.empty()) {
+                delete_selections();
+            } else {
+                for (cursor &cursor: _cursors) {
+                    delete_glyph(cursor.coord);
+                }
             }
         }
 
@@ -807,6 +815,7 @@ void ImEdit::editor::handle_kb_input() {
     }
 
     if (!im_io.InputQueueCharacters.empty()) {
+        delete_selections();
         for (ImWchar c : im_io.InputQueueCharacters) {
             for (cursor& cursor : _cursors) {
                 _lines[cursor.coord.line].tokens[cursor.coord.token].data.insert(cursor.coord.glyph, 1, c);
@@ -926,7 +935,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         }
     }
 
-    delete_non_unique_cursors();
+    manage_extra_cursors();
 
 }
 
@@ -945,17 +954,17 @@ void ImEdit::editor::handle_mouse_input() {
         coordinates coord = mouse_coord.as_default_coords();
 
         // left click dragging = update selection
-        if (!_selection) {
-            _selection.emplace();
+        if (_selections.empty()) {
+            _selections.emplace_back();
             coordinates previous_coord = _last_frame_mouse_coords->as_default_coords();
             if (_last_frame_mouse_coords->is_left) {
                 previous_coord.token = previous_coord.glyph = 0;
             }
-            _selection->beg = previous_coord;
-            _selection->end = coord;
+            _selections.back().beg = previous_coord;
+            _selections.back().end = coord;
         }
         else {
-            _selection->end = coord;
+            _selections.back().end = coord;
         }
 
         _cursors.clear();
@@ -964,7 +973,7 @@ void ImEdit::editor::handle_mouse_input() {
 
     if (ImGui::IsMouseClicked(0)) {
 
-        _selection.reset();
+        _selections.clear();
 
         ImGuiIO &im_io = ImGui::GetIO();
         const bool alt = im_io.ConfigMacOSXBehaviors ? im_io.KeyCtrl : im_io.KeyAlt;
@@ -1011,12 +1020,14 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
     }
     auto base_coords = coordinates_for(static_cast<unsigned>(std::round(pos.x / glyph_size.x)), line);
 
+
     coords.token = base_coords.token;
     coords.glyph = base_coords.glyph;
 
     return coords;
 }
 
+// Padding for line numbers, breakpoints, and such.
 float ImEdit::editor::compute_extra_padding() const noexcept {
     auto glyph_length = glyph_size().x;
     return _lines.empty() ? 5 * glyph_length : std::floor(std::log10(static_cast<float>(_lines.size())) + 4) * glyph_length;
@@ -1099,11 +1110,12 @@ ImVec2 ImEdit::editor::glyph_size() const noexcept {
     return *_glyph_size;
 }
 
-void ImEdit::editor::selection_set(ImEdit::region r) noexcept {
+void ImEdit::editor::selection_add(ImEdit::region r) noexcept {
+    _cursors.push_back({r.end, column_count_to(r.end)});
     if (coordinates_lt(r.end, r.beg)) {
         std::swap(r.beg, r.end);
     }
-    _selection = r;
+    _selections.emplace_back(r);
 }
 
 ImVec2 ImEdit::editor::calc_text_size(const char *text, const char *text_end) noexcept {
@@ -1111,3 +1123,31 @@ ImVec2 ImEdit::editor::calc_text_size(const char *text, const char *text_end) no
     return font->CalcTextSizeA(font->FontSize, FLT_MAX, -1.f, text, text_end, nullptr);
 }
 
+bool ImEdit::editor::coordinates_within(ImEdit::coordinates coord, ImEdit::region r) const noexcept {
+    if (coordinates_lt(r.end, r.beg)) {
+        std::swap(r.end, r.beg);
+    }
+    return coordinates_lt_eq(r.beg, coord) && coordinates_lt_eq(coord, r.end);
+}
+
+void ImEdit::editor::delete_selections() {
+
+    assert(_selections.empty() || _cursors.size() == _selections.size());
+    for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
+
+        coordinates beg;
+        coordinates end;
+        if (coordinates_lt(_selections[i].beg, _selections[i].end)) {
+            beg = _selections[i].beg;
+            end = _selections[i].end;
+        } else {
+            beg = _selections[i].end;
+            end = _selections[i].beg;
+        }
+
+        // TODO
+
+        _cursors[i].coord = beg;
+        _cursors[i].wanted_column = column_count_to(beg);
+    }
+}

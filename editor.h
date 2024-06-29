@@ -124,7 +124,7 @@ namespace ImEdit {
 
     class editor {
     public:
-        editor(std::string id);
+        explicit editor(std::string id);
 
         void render();
         void set_data(const std::string& data);
@@ -133,7 +133,9 @@ namespace ImEdit {
             _lines = std::move(lines);
         }
 
-        void selection_set(region r) noexcept;
+        void selection_add(region r) noexcept;
+        std::vector<region> selection_get() const noexcept { return _selections; }
+        void delete_selections();
 
         [[nodiscard]] style& get_style() noexcept { return _style; }
 
@@ -168,8 +170,8 @@ namespace ImEdit {
         bool _allow_mouse_input{true};
         bool _show_leading_space{true};
         unsigned int _tab_length{4};
-        std::optional<float> _draw_height{}; // TODO
-        std::optional<float> _draw_width{}; // TODO
+        std::optional<float> _height{}; // TODO
+        std::optional<float> _width{}; // TODO
 
     private:
 
@@ -189,12 +191,15 @@ namespace ImEdit {
         [[nodiscard]] bool coordinates_eq(coordinates lhs, coordinates rhs) const noexcept;
         [[nodiscard]] bool coordinates_lt(coordinates lhs, coordinates rhs) const noexcept;
         [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
+        [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept;
+
+        // Deletes cursors that are at the same place to leave only on of them,
+        // and merges selections that should be merged together (when using multiple cursors)
+        void manage_extra_cursors();
 
         [[nodiscard]] ImVec2 glyph_size() const noexcept;
 
         [[nodiscard]] static ImVec2 calc_text_size(const char* text, const char* text_end = nullptr) noexcept;
-
-        void delete_non_unique_cursors();
 
         void find_longest_line();
         [[nodiscard]] float calc_line_size(unsigned int line, float space_size = ImGui::CalcTextSize(" ").x) const noexcept;
@@ -214,7 +219,7 @@ namespace ImEdit {
         float _longest_line_px{};
 
         ImVec2 _imgui_cursor_position{};
-        std::optional<region> _selection{};
+        std::vector<region> _selections{};
 
         const std::string _imgui_id;
 
