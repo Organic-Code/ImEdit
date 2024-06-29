@@ -625,6 +625,15 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
     while (column_count_to(coord) < column_count && !is_last_glyph(coord)) {
         coord = coordinates_move_right(coord);
     }
+
+    auto& str = _lines[coord.line].tokens[coord.token].data;
+    if (coord.glyph != 0 && str[coord.glyph - 1] == '\t') {
+        auto actual_tab_length = _tab_length - column_count % _tab_length;
+        if (actual_tab_length != _tab_length && actual_tab_length >= _tab_length / 2) {
+            --coord.glyph;
+        }
+    }
+
     return coord;
 }
 
@@ -967,7 +976,7 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
 
     pos.x -= compute_extra_padding();
 
-    auto line = std::min(static_cast<unsigned>(std::round((pos.y - 3)/ ImGui::GetTextLineHeightWithSpacing())),
+    auto line = std::min(static_cast<unsigned>(pos.y / ImGui::GetTextLineHeightWithSpacing()),
                          static_cast<unsigned>(_lines.size() - 1));
     coords.line = line;
 
