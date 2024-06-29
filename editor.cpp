@@ -128,31 +128,48 @@ void ImEdit::editor::render() {
         find_longest_line();
     }
 
-    const auto draw_width = _draw_width ? *_draw_width : _longest_line_px;
-    const auto draw_height = _draw_height ? *_draw_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1);
-
     const auto space_length = glyph_size();
     auto imgui_cursor = ImGui::GetCursorScreenPos();
-    const ImVec2 draw_region{draw_width, draw_height};
+    const ImVec2 draw_region{
+        _width ? *_width : _longest_line_px,
+        _height ? *_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1)
+    };
     auto draw_list = ImGui::GetWindowDrawList();
 
     // space to the left for displaying line numbers, breakpoints, and such
     const auto extra_padding = compute_extra_padding();
 
+    if (draw_region.x == 0 || draw_region.y == 0) {
+        return;
+    }
+
+
+
+    ImGui::InvisibleButton("invisible button",
+                           {draw_region.x + extra_padding, draw_region.y});
+    const auto rect_min = ImGui::GetItemRectMin();
+    const auto rect_max = ImGui::GetItemRectMax();
+    if (ImGui::IsItemHovered()) {
+        ImGui::BeginTooltip();
+        ImGui::Text("(%d, %d) - (%d, %d)", (int)rect_min.x,
+                    (int)rect_min.y, (int)rect_max.x, (int)rect_max.y);
+        ImGui::EndTooltip();
+    }
+    ImGui::PushClipRect(rect_min, rect_max, true);
     draw_list->AddRectFilled(imgui_cursor,
                              {imgui_cursor.x + draw_region.x + extra_padding, imgui_cursor.y + draw_region.y},
                              _style.background_color);
 
-
-
-    ImGui::InvisibleButton(_imgui_id.c_str(),
-                           {std::max(draw_region.x + extra_padding, _longest_line_px), draw_region.y});
     handle_mouse_input();
     handle_kb_input();
 
 
     auto line_numbers_max_glyphs = std::to_string(_lines.size()).size();
     for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
+        if (imgui_cursor.y > draw_region.y + _imgui_cursor_position.y) {
+            break;
+        }
+
         const line& line = _lines[i];
 
         assert(!_cursors.empty());
@@ -337,6 +354,8 @@ void ImEdit::editor::render() {
         imgui_cursor.x = _imgui_cursor_position.x;
         imgui_cursor.y += ImGui::GetTextLineHeightWithSpacing();
     }
+
+    ImGui::PopClipRect();
 }
 
 
