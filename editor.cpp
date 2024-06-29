@@ -121,43 +121,47 @@ void ImEdit::editor::set_data(const std::string &data) {
 
 void ImEdit::editor::render() {
 
-    _imgui_cursor_position = ImGui::GetCursorScreenPos();
-
     // TODO: wrapping (use BeginChild?)
     if (_longest_line_px == 0) {
         find_longest_line();
     }
 
-    const auto space_length = glyph_size();
-    auto imgui_cursor = ImGui::GetCursorScreenPos();
-    const ImVec2 draw_region{
-        _width ? *_width : _longest_line_px,
-        _height ? *_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1)
-    };
-    auto draw_list = ImGui::GetWindowDrawList();
-
     // space to the left for displaying line numbers, breakpoints, and such
     const auto extra_padding = compute_extra_padding();
+    const ImVec2 draw_region{std::max(_longest_line_px + extra_padding, _width ? *_width : 0),
+                             std::max(ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1), _height ? *_height : 0)};
+
+    ImVec2 window_region{
+            std::min(_width ? *_width : _longest_line_px + extra_padding, ImGui::GetContentRegionAvail().x),
+            std::min(_height ? *_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1), ImGui::GetContentRegionAvail().y)
+    };
+
+
+    if (!ImGui::BeginChild(_imgui_id.c_str(), window_region, ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar)) {
+        ImGui::EndChild();
+        return;
+    }
+
+    _imgui_cursor_position = ImGui::GetCursorScreenPos();
+    auto imgui_cursor = _imgui_cursor_position;
+    auto draw_list = ImGui::GetWindowDrawList();
+
+    const auto space_length = glyph_size();
+
 
     if (draw_region.x == 0 || draw_region.y == 0) {
         return;
     }
 
-
-
     ImGui::InvisibleButton("invisible button",
-                           {draw_region.x + extra_padding, draw_region.y});
+                           {draw_region.x, draw_region.y});
+
     const auto rect_min = ImGui::GetItemRectMin();
     const auto rect_max = ImGui::GetItemRectMax();
-    if (ImGui::IsItemHovered()) {
-        ImGui::BeginTooltip();
-        ImGui::Text("(%d, %d) - (%d, %d)", (int)rect_min.x,
-                    (int)rect_min.y, (int)rect_max.x, (int)rect_max.y);
-        ImGui::EndTooltip();
-    }
     ImGui::PushClipRect(rect_min, rect_max, true);
+
     draw_list->AddRectFilled(imgui_cursor,
-                             {imgui_cursor.x + draw_region.x + extra_padding, imgui_cursor.y + draw_region.y},
+                             {imgui_cursor.x + draw_region.x, imgui_cursor.y + draw_region.y},
                              _style.background_color);
 
     handle_mouse_input();
@@ -174,7 +178,7 @@ void ImEdit::editor::render() {
 
         assert(!_cursors.empty());
         if (_cursors.back().coord.line == i) {
-            draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x + extra_padding,
+            draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x,
                                                     imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
                                      _style.current_line_color);
         }
@@ -358,6 +362,7 @@ void ImEdit::editor::render() {
     }
 
     ImGui::PopClipRect();
+    ImGui::EndChild();
 }
 
 
