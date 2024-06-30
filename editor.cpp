@@ -410,6 +410,8 @@ void ImEdit::editor::move_cursors_up() {
     _selections.clear();
     manage_extra_cursors();
 }
+
+
 void ImEdit::editor::move_cursors_down() {
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_down(cursor.coord, cursor.wanted_column);
@@ -445,6 +447,7 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_up(coordinates coord, unsig
     coord = coordinates_for(wanted_column, coord.line - 1);
     return coord;
 }
+
 
 ImEdit::coordinates ImEdit::editor::move_coordinates_down(coordinates coord, unsigned int wanted_column) const noexcept {
     if (coord.line == _lines.size() - 1) {
@@ -584,6 +587,7 @@ void ImEdit::editor::move_cursors_right_token() {
     manage_extra_cursors();
 
 }
+
 
 unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const noexcept {
     if (coord.token == 0 && coord.glyph == 0) {
@@ -839,6 +843,9 @@ void ImEdit::editor::handle_kb_input() {
         else if (ImGui::IsKeyPressed(ImGuiKey_Home)) {
             move_cursors_to_beg();
         }
+        else if (ImGui::IsKeyPressed(ImGuiKey_Tab)) {
+            input_char('\t');
+        }
     }
 
     if (ctrl && !shift && !alt) {
@@ -870,19 +877,7 @@ void ImEdit::editor::handle_kb_input() {
     if (!im_io.InputQueueCharacters.empty()) {
         delete_selections();
         for (ImWchar c : im_io.InputQueueCharacters) {
-            for (cursor& cursor : _cursors) {
-                if (_lines[cursor.coord.line].tokens.empty()) {
-                    _lines[cursor.coord.line].tokens.push_back({"", token_type::unknown});
-                }
-                _lines[cursor.coord.line].tokens[cursor.coord.token].data.insert(cursor.coord.glyph, 1, c);
-                ++cursor.coord.glyph;
-
-                auto length = calc_line_size(cursor.coord.line);
-                if (length > _longest_line_px) {
-                    _longest_line_px = length;
-                    _longest_line_idx = cursor.coord.line;
-                }
-            }
+            input_char(c);
         }
         im_io.InputQueueCharacters.resize(0); // resize(0) makes it so that we keep the memory buffer instead of discarding it
     }
@@ -1205,5 +1200,22 @@ void ImEdit::editor::delete_selections() {
 
         _cursors[i].coord = beg;
         _cursors[i].wanted_column = column_count_to(beg);
+    }
+}
+
+void ImEdit::editor::input_char(ImWchar c) {
+    // TODO utf8
+    for (cursor& cursor : _cursors) {
+        if (_lines[cursor.coord.line].tokens.empty()) {
+            _lines[cursor.coord.line].tokens.push_back({"", token_type::unknown});
+        }
+        _lines[cursor.coord.line].tokens[cursor.coord.token].data.insert(cursor.coord.glyph, 1, c);
+        ++cursor.coord.glyph;
+
+        auto length = calc_line_size(cursor.coord.line);
+        if (length > _longest_line_px) {
+            _longest_line_px = length;
+            _longest_line_idx = cursor.coord.line;
+        }
     }
 }

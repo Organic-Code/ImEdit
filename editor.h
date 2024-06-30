@@ -156,6 +156,8 @@ namespace ImEdit {
         void move_cursors_left_token(); // moves by one token to the left
         void move_cursors_right_token(); // moves by one token to the right
 
+        void input_char(ImWchar c);
+
         void clear();
 
         void delete_glyph(coordinates);
