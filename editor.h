@@ -133,28 +133,28 @@ namespace ImEdit {
             _lines = std::move(lines);
         }
 
-        void selection_add(region r) noexcept;
-        std::vector<region> selection_get() const noexcept { return _selections; }
+        void add_selection(region r) noexcept;
+        const std::vector<region>& get_selections() const noexcept { return _selections; }
         void delete_selections();
 
         [[nodiscard]] style& get_style() noexcept { return _style; }
 
-        [[nodiscard]] std::string_view tooltip_store(std::string tooltip) {
+        [[nodiscard]] std::string_view store_tooltip(std::string tooltip) {
             _tooltips.push_back(std::move(tooltip));
             return _tooltips.back();
         }
 
-        void cursor_add(coordinates coords);
-        void cursor_remove(coordinates coords);
+        void add_cursor(coordinates coords);
+        void remove_cursor(coordinates coords);
 
-        void cursors_move_up();
-        void cursors_move_down();
-        void cursors_move_left();
-        void cursors_move_right();
-        void cursors_move_to_end(); // endline
-        void cursors_move_to_beg(); // begline
-        void cursors_move_left_token(); // moves by one token to the left
-        void cursors_move_right_token(); // moves by one token to the right
+        void move_cursors_up();
+        void move_cursors_down();
+        void move_cursors_left();
+        void move_cursors_right();
+        void move_cursors_to_end(); // endline
+        void move_cursors_to_beg(); // begline
+        void move_cursors_left_token(); // moves by one token to the left
+        void move_cursors_right_token(); // moves by one token to the right
 
         void clear();
 
@@ -170,8 +170,8 @@ namespace ImEdit {
         bool _allow_mouse_input{true};
         bool _show_leading_space{true};
         unsigned int _tab_length{4};
-        std::optional<float> _height{}; // TODO
-        std::optional<float> _width{}; // TODO
+        std::optional<float> _height{};
+        std::optional<float> _width{};
 
     private:
 
@@ -181,10 +181,10 @@ namespace ImEdit {
         // Returns the coordinates for given line such that column_count_to(coordinates) returns column_count, if possible for that line
         [[nodiscard]] coordinates coordinates_for(unsigned int column_count, unsigned int line) const noexcept;
 
-        [[nodiscard]] coordinates coordinates_move_up(coordinates, unsigned int wanted_column) const noexcept;
-        [[nodiscard]] coordinates coordinates_move_down(coordinates, unsigned int wanted_column) const noexcept;
-        [[nodiscard]] coordinates coordinates_move_left(coordinates) const noexcept;
-        [[nodiscard]] coordinates coordinates_move_right(coordinates) const noexcept;
+        [[nodiscard]] coordinates move_coordinates_up(coordinates, unsigned int wanted_column) const noexcept;
+        [[nodiscard]] coordinates move_coordinates_down(coordinates, unsigned int wanted_column) const noexcept;
+        [[nodiscard]] coordinates move_coordinates_left(coordinates) const noexcept;
+        [[nodiscard]] coordinates move_coordinates_right(coordinates) const noexcept;
 
         [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos);
 
