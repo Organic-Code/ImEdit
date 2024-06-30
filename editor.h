@@ -31,6 +31,9 @@
 #include <deque>
 #include <optional>
 #include <unordered_map>
+#include <functional>
+#include <variant>
+#include <chrono>
 
 #if __has_include(<imgui.h>)
 #include <imgui.h>
@@ -77,8 +80,18 @@ namespace ImEdit {
     struct token {
         std::string data{};
         token_type::enum_ type{};
-        std::string_view tooltip{}; // todo : move to an unordered map <token, string> in editor ? (using id + data)
-        std::byte id{0}; // if two tokens have data and id both set as equal by lexer, selecting one will highlight the other. 0 = ignored
+        std::byte id{0}; // if two tokens have data, id, and type all set as equal by lexer, selecting one will highlight the other. id == 0: ignored (TODO)
+
+        bool operator==(const token& other) const noexcept {
+            return id == other.id && type == other.type && data == other.data;
+        }
+    };
+
+    struct token_hash {
+        std::size_t operator()(const token& tok) const {
+            return str_hash(tok.data) >> 8 | static_cast<std::size_t>(tok.id) << (sizeof(std::size_t) * 8 - 8);
+        }
+        std::hash<std::string> str_hash;
     };
 
     struct line {
@@ -87,6 +100,11 @@ namespace ImEdit {
     };
 
     struct token_style {
+        token_style() : color{}, bold{false}, italic{false} {}
+        token_style(ImColor c) : color{c}, bold{false}, italic{false} {} // NOLINT(*-explicit-constructor)
+        token_style(ImColor c, bool b) : color{c}, bold{b}, italic{false} {}
+        token_style(ImColor c, bool b, bool i) : color{c}, bold{b}, italic{i} {}
+
         ImColor color;
         bool bold : 1; // You need to set editor::_bold_font (and eventually editor::_bold_italic_font) to use this
         bool italic : 1; // You need to set editor::_italic_font (and eventually editor::_bold_italic_font) to use this
@@ -145,11 +163,6 @@ namespace ImEdit {
 
         [[nodiscard]] style& get_style() noexcept { return _style; }
 
-        [[nodiscard]] std::string_view store_tooltip(std::string tooltip) {
-            _tooltips.push_back(std::move(tooltip));
-            return _tooltips.back();
-        }
-
         void add_cursor(coordinates coords);
         void remove_cursor(coordinates coords);
 
@@ -172,6 +185,8 @@ namespace ImEdit {
             _glyph_size.reset();
         }
 
+        void reset_current_tooltip();
+
         static style get_default_style(); // similar to monokai
 
         bool _allow_keyboard_input{true}; // set to false to inhibit keyboard management
@@ -186,6 +201,16 @@ namespace ImEdit {
         ImFont* _bold_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
         ImFont* _italic_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
         ImFont* _bold_italic_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
+
+        // Tooltips.
+        // When matching token is hovered and _tooltips[token] exists, calls ImGui::BeginTooltip,
+        // and either prints the variant’s string, or calls the std::function so that you can draw whatever you wish in the tooltip.
+        // Callback is called with _tooltip_data as its first parameter.
+        using tooltip_callback = std::function<void(void* tooltip_data, const token&)>;
+        std::unordered_map<token, std::variant<std::string, tooltip_callback>, token_hash> _tooltips; // when modifying this, remember to call editor::reset_current_tooltip
+        void* _tooltip_data{nullptr}; // Passed to tooltip callbacks as user data
+        std::chrono::milliseconds _tooltip_delay{std::chrono::seconds(1)}; // Delay before the tooltip appears
+        std::chrono::milliseconds _tooltip_grace_period{std::chrono::milliseconds(250)}; // Delay for which the tooltip stays up, even after the mouse went away
 
     private:
 
@@ -222,8 +247,9 @@ namespace ImEdit {
         void handle_mouse_input();
         float compute_extra_padding() const noexcept;
 
+        void show_tooltip();
+
         std::vector<cursor> _cursors{};
-        std::deque<std::string> _tooltips{};
         std::deque<line> _lines{};
         style _style{};
 
@@ -236,6 +262,11 @@ namespace ImEdit {
         std::vector<region> _selections{};
 
         const std::string _imgui_id;
+
+        std::optional<ImVec2> _tooltip_pos{};
+        std::optional<decltype(_tooltips)::iterator> _tooltip{};
+        std::optional<std::chrono::system_clock::time_point> _tooltip_chrono{};
+        std::chrono::system_clock::time_point _tooltip_last_hovered_at{};
 
         mutable std::optional<ImVec2> _glyph_size{};
     };

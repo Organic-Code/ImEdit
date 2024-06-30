@@ -106,7 +106,7 @@ void ImEdit::editor::set_data(const std::string &data) {
 
         } while (iss.fail());
 
-        std::string line = str.data(); // trimming extras '\0'
+        std::string line = str.data(); // trimming extras '\0' NOLINT(*-redundant-string-cstr)
         unparsed_tokens.emplace_back();
         auto it = line.begin();
         while (it != line.end()) {
@@ -204,6 +204,7 @@ void ImEdit::editor::render() {
 
 
     auto line_numbers_max_glyphs = std::to_string(_lines.size()).size();
+    auto tooltip_this_frame = _tooltips.end();
     for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
         // TODO do not render lines that are too much at the beginning or too much at the end (look-up for scroll)
 
@@ -212,7 +213,7 @@ void ImEdit::editor::render() {
             break;
         }
 
-        const line& line = _lines[i];
+        const line &line = _lines[i];
 
         assert(!_cursors.empty());
         if (_cursors.back().coord.line == i) {
@@ -224,7 +225,8 @@ void ImEdit::editor::render() {
         // drawing line numbers
         auto line_number = std::to_string(i);
         auto extra_shift = static_cast<float>(line_numbers_max_glyphs - line_number.size()) * space_length.x;
-        draw_list->AddText({imgui_cursor.x + extra_shift, imgui_cursor.y}, _style.line_number_color, line_number.c_str());
+        draw_list->AddText({imgui_cursor.x + extra_shift, imgui_cursor.y}, _style.line_number_color,
+                           line_number.c_str());
 
         imgui_cursor.x += extra_padding - 5;
         draw_list->AddLine(imgui_cursor, {imgui_cursor.x, imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
@@ -237,11 +239,12 @@ void ImEdit::editor::render() {
 
         if (line.background) {
             draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x,
-                                                    imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()}, *line.background);
+                                                    imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
+                                     *line.background);
         }
 
         // Drawing selected region
-        for (region select : _selections) {
+        for (region select: _selections) {
             if (coordinates_eq(select.beg, select.end)) {
                 continue;
             }
@@ -316,28 +319,26 @@ void ImEdit::editor::render() {
         bool is_leading_space = true;
         unsigned int column = 0;
 
-
-
-        for (const auto & token : line.tokens) {
+        for (const token &token: line.tokens) {
             if (imgui_cursor.x >= draw_region.x + _imgui_cursor_position.x + extra_padding) {
                 break;
             }
 
             // If you are getting an error here, maybe you defined your own token types and forgot to add them to ImEdit::editor.get_style().token_colors
             const token_style style = _style.token_colors.at(token.type);
-            const std::string& data = token.data;
+            const std::string &data = token.data;
 
 
             if (token.type == token_type::blank) {
 
                 bool show_space = _show_leading_space && is_leading_space;
-                for (char c : data) {
+                for (char c: data) {
                     if (c == '\t') {
                         unsigned int number_of_spaces = _tab_length - column % _tab_length;
                         float tab_length = space_length.x * static_cast<float>(number_of_spaces);
                         if (show_space) {
                             auto line_height = ImGui::GetFontSize() / 10;
-                            auto line_y_pos = (space_length.y - line_height) / 2 ;
+                            auto line_y_pos = (space_length.y - line_height) / 2;
                             draw_list->AddLine(
                                     ImVec2(imgui_cursor.x + 2, imgui_cursor.y + line_y_pos),
                                     ImVec2(imgui_cursor.x + tab_length - 2, imgui_cursor.y + line_y_pos),
@@ -352,15 +353,14 @@ void ImEdit::editor::render() {
                                     ImVec2(imgui_cursor.x + space_length.x / 2, imgui_cursor.y + space_length.y / 2),
                                     ImGui::GetFontSize() / 10,
                                     style.color
-                                    );
+                            );
                         }
                         imgui_cursor.x += space_length.x;
                         ++column;
                     }
                 }
 
-            }
-            else {
+            } else {
 
                 is_leading_space = false;
 
@@ -386,11 +386,26 @@ void ImEdit::editor::render() {
 
                 draw_list->AddText(imgui_cursor, style.color, data.data(), data.data() + data.size());
                 auto text_size = calc_text_size(data.data(), data.data() + data.size());
-                if (!token.tooltip.empty()) {
-                    if (ImGui::IsMouseHoveringRect(imgui_cursor, imgui_cursor + text_size) && ImGui::IsItemHovered()) {
-                        ImGui::BeginTooltip();
-                        ImGui::Text("%s", token.tooltip.data()); // TODO
-                        ImGui::EndTooltip();
+
+                if (token.id != std::byte{0} && ImGui::IsMouseHoveringRect(imgui_cursor, imgui_cursor + text_size)
+                    && ImGui::IsItemHovered()) {
+                    auto tooltip = _tooltips.find(token);
+                    if (tooltip != _tooltips.end()) {
+                        tooltip_this_frame = tooltip;
+                        if (_tooltip && *_tooltip != tooltip) {
+                            _tooltip_chrono.reset();
+                        }
+                        if (!_tooltip || *_tooltip != tooltip) {
+                            _tooltip = tooltip;
+                            auto now = std::chrono::system_clock::now();
+                            if (!_tooltip_chrono) {
+                                _tooltip_chrono = now;
+                            }
+                            if (now - *_tooltip_chrono <= _tooltip_delay) {
+                                _tooltip_pos = imgui_cursor + ImVec2{0, glyph_size().y};
+                            }
+                            _tooltip_last_hovered_at = now;
+                        }
                     }
                 }
 
@@ -404,18 +419,21 @@ void ImEdit::editor::render() {
         }
 
         // Render cursor
-        for (cursor& c : _cursors) {
-            if (i == c.coord.line) {
-                auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
-                        std::chrono::system_clock::now().time_since_epoch());
-                time %= 1500;
+        if (ImGui::IsWindowFocused()) {
+            for (cursor &c: _cursors) {
+                if (i == c.coord.line) {
+                    auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch());
+                    time %= 1500;
 
-                if (time.count() > 400) {
-                    auto x = _imgui_cursor_position.x + static_cast<float>(column_count_to(c.coord)) * space_length.x + extra_padding;
-                    draw_list->AddLine(
-                            {x, imgui_cursor.y + 2}, {x, imgui_cursor.y + space_length.y - 2},
-                            _style.cursor_color
-                    );
+                    if (time.count() > 400) {
+                        auto x = _imgui_cursor_position.x +
+                                 static_cast<float>(column_count_to(c.coord)) * space_length.x + extra_padding;
+                        draw_list->AddLine(
+                                {x, imgui_cursor.y + 2}, {x, imgui_cursor.y + space_length.y - 2},
+                                _style.cursor_color
+                        );
+                    }
                 }
             }
         }
@@ -426,6 +444,17 @@ void ImEdit::editor::render() {
 
     ImGui::PopClipRect();
     ImGui::EndChild();
+
+    if (tooltip_this_frame == _tooltips.end() && std::chrono::system_clock::now() - _tooltip_last_hovered_at > _tooltip_grace_period) {
+        _tooltip.reset();
+    }
+
+    if (_tooltip) {
+        assert(*_tooltip != _tooltips.end());
+        show_tooltip();
+    } else {
+        reset_current_tooltip();
+    }
 
     if (_default_font != nullptr) {
         ImGui::PopFont();
@@ -606,7 +635,7 @@ void ImEdit::editor::move_cursors_left_token() {
 void ImEdit::editor::move_cursors_right_token() {
     // TODO: change for going from word to word instead of from token to token ? Or let this be decided by the lexer ?
     for (auto& cursor : _cursors) {
-        if (_lines[cursor.coord.line].tokens.empty()) {
+        if (_lines[cursor.coord.line].tokens.empty()) { // NOLINT(*-branch-clone)
             cursor.coord = move_coordinates_right(cursor.coord);
         }
         else if (auto glyph_count = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size() ; cursor.coord.glyph < glyph_count) {
@@ -763,12 +792,15 @@ void ImEdit::editor::clear() {
     _tooltips.clear();
     _lines.clear();
     _selections.clear();
+    _tooltips.clear();
     _last_frame_mouse_coords.reset();
     _glyph_size.reset();
     _longest_line_idx = 0;
     _longest_line_px = 0;
 
     _cursors.emplace_back();
+    _tooltip_data = nullptr;
+    reset_current_tooltip();
 }
 
 void ImEdit::editor::find_longest_line() {
@@ -837,7 +869,6 @@ void ImEdit::editor::handle_kb_input() {
                             auto& original = line.tokens[c.coord.token];
                             token tok;
                             tok.data = original.data.substr(c.coord.glyph);
-                            original.tooltip = "";
                             original.type = token_type::unknown;
                             original.id &= std::byte(0);
                             line.tokens[c.coord.token].data.erase(c.coord.glyph);
@@ -1259,6 +1290,49 @@ void ImEdit::editor::input_char(ImWchar c) {
             _longest_line_idx = cursor.coord.line;
         }
     }
+}
+
+#include <iostream>
+
+void ImEdit::editor::show_tooltip() {
+
+    if (_tooltip_chrono && std::chrono::system_clock::now() - *_tooltip_chrono > _tooltip_delay) {
+
+        assert(_tooltip_pos);
+        ImGui::SetNextWindowPos(*_tooltip_pos);
+        ImGui::SetNextWindowFocus();
+        if (ImGui::Begin("##tooltip", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize)) {
+            std::visit([this](auto &&arg) {
+                           using T = std::decay_t<decltype(arg)>;
+                           if constexpr (std::is_same_v<T, std::string>) {
+                               ImGui::Text("%s", arg.c_str());
+                           } else if constexpr (std::is_same_v<T, std::function<void(void *,
+                                                                                     const ImEdit::token &)>>) {
+                               arg(_tooltip_data, (*_tooltip)->first);
+                           } else {
+                               static_assert(false, "Missing visitor branches");
+                           }
+                       },
+                       (*_tooltip)->second);
+            if (ImGui::IsWindowFocused()) {
+                handle_kb_input();
+            }
+            if (!ImGui::IsWindowAppearing() && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
+                if (std::chrono::system_clock::now() - _tooltip_last_hovered_at > _tooltip_grace_period) {
+                    _tooltip.reset();
+                }
+            } else {
+                _tooltip_last_hovered_at = std::chrono::system_clock::now();
+            }
+        }
+        ImGui::End();
+    }
+}
+
+void ImEdit::editor::reset_current_tooltip() {
+    _tooltip.reset();
+    _tooltip_pos.reset();
+    _tooltip_chrono.reset();
 }
 
 ImEdit::style ImEdit::editor::get_default_style() {
