@@ -51,6 +51,9 @@ namespace ImEdit {
 #endif
 
     struct token_type {
+        // You can add token types by defining IMEDIT_CUSTOM_TOKEN_TYPES.
+        // IMEDIT_CUSTOM_TOKEN_TYPES must end with a comma
+        // Any token types added this way MUST be added to ImEdit::editor::_style.token_style
         enum enum_ {
             unknown,
             keyword,
@@ -117,7 +120,7 @@ namespace ImEdit {
         ImColor line_number_color{};
         ImColor line_number_separator_color{};
         ImColor current_line_color{};
-        std::unordered_map<token_type::enum_, token_style, token_type> token_colors{};
+        std::unordered_map<token_type::enum_, token_style, token_type> token_style{};
     };
 
     struct coordinates {
@@ -161,8 +164,6 @@ namespace ImEdit {
         const std::vector<region>& get_selections() const noexcept { return _selections; }
         void delete_selections();
 
-        [[nodiscard]] style& get_style() noexcept { return _style; }
-
         void add_cursor(coordinates coords);
         void remove_cursor(coordinates coords);
 
@@ -201,6 +202,8 @@ namespace ImEdit {
         ImFont* _bold_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
         ImFont* _italic_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
         ImFont* _bold_italic_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
+
+        style _style{};
 
         // Tooltips.
         // When matching token is hovered and _tooltips[token] exists, calls ImGui::BeginTooltip,
@@ -251,7 +254,6 @@ namespace ImEdit {
 
         std::vector<cursor> _cursors{};
         std::deque<line> _lines{};
-        style _style{};
 
         std::optional<coordinates_cbl> _last_frame_mouse_coords{};
 

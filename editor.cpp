@@ -325,7 +325,7 @@ void ImEdit::editor::render() {
             }
 
             // If you are getting an error here, maybe you defined your own token types and forgot to add them to ImEdit::editor.get_style().token_colors
-            const token_style style = _style.token_colors.at(token.type);
+            const token_style style = _style.token_style.at(token.type);
             const std::string &data = token.data;
 
 
@@ -1343,21 +1343,21 @@ ImEdit::style ImEdit::editor::get_default_style() {
     s.line_number_color                           = ImColor(158, 160, 159, 255);
     s.line_number_separator_color                 = ImColor( 55,  55,  55, 255);
     s.current_line_color                          = ImColor( 50,  50,  50, 255);
-    s.token_colors[token_type::unknown]           = token_style{ImColor(  0,   0,   0, 255), false, false};
-    s.token_colors[token_type::keyword]           = token_style{ImColor(210,  40,  58, 255), false, false};
-    s.token_colors[token_type::comment]           = token_style{ImColor(120, 120, 120, 255), false,  true};
-    s.token_colors[token_type::multiline_comment] = token_style{ImColor(120, 120, 120, 255), false,  true};
-    s.token_colors[token_type::blank]             = token_style{ImColor(255, 255, 255, 175), false, false};
-    s.token_colors[token_type::variable]          = token_style{ImColor(209, 218, 218, 255), false, false};
-    s.token_colors[token_type::string_literal]    = token_style{ImColor(219, 193,  82, 255),  true, false};
-    s.token_colors[token_type::num_literal]       = token_style{ImColor(169, 123, 227, 255), false, false};
-    s.token_colors[token_type::type]              = token_style{ImColor(167, 236,  33, 255), false, false};
-    s.token_colors[token_type::none]              = token_style{ImColor(255, 255, 255, 255), false, false};
-    s.token_colors[token_type::function]          = token_style{ImColor(238, 182,  98, 255), false, false};
-    s.token_colors[token_type::opening]           = token_style{ImColor(226, 214, 187, 255), false, false};
-    s.token_colors[token_type::closing]           = token_style{ImColor(226, 214, 187, 255), false, false};
-    s.token_colors[token_type::operator_]         = token_style{ImColor(249,  38, 114, 255), false, false};
-    s.token_colors[token_type::punctuation]       = token_style{ImColor(226, 214, 187, 255), false, false};
-    s.token_colors[token_type::max]               = token_style{ImColor(  0,   0,   0, 255), false, false};
+    s.token_style[token_type::unknown]           = token_style{ImColor(  0,   0,   0, 255), false, false};
+    s.token_style[token_type::keyword]           = token_style{ImColor(210,  40,  58, 255), false, false};
+    s.token_style[token_type::comment]           = token_style{ImColor(120, 120, 120, 255), false,  true};
+    s.token_style[token_type::multiline_comment] = token_style{ImColor(120, 120, 120, 255), false,  true};
+    s.token_style[token_type::blank]             = token_style{ImColor(255, 255, 255, 175), false, false};
+    s.token_style[token_type::variable]          = token_style{ImColor(209, 218, 218, 255), false, false};
+    s.token_style[token_type::string_literal]    = token_style{ImColor(219, 193,  82, 255),  true, false};
+    s.token_style[token_type::num_literal]       = token_style{ImColor(169, 123, 227, 255), false, false};
+    s.token_style[token_type::type]              = token_style{ImColor(167, 236,  33, 255), false, false};
+    s.token_style[token_type::none]              = token_style{ImColor(255, 255, 255, 255), false, false};
+    s.token_style[token_type::function]          = token_style{ImColor(238, 182,  98, 255), false, false};
+    s.token_style[token_type::opening]           = token_style{ImColor(226, 214, 187, 255), false, false};
+    s.token_style[token_type::closing]           = token_style{ImColor(226, 214, 187, 255), false, false};
+    s.token_style[token_type::operator_]         = token_style{ImColor(249,  38, 114, 255), false, false};
+    s.token_style[token_type::punctuation]       = token_style{ImColor(226, 214, 187, 255), false, false};
+    s.token_style[token_type::max]               = token_style{ImColor(  0,   0,   0, 255), false, false};
     return s;
 }
