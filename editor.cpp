@@ -53,8 +53,34 @@ namespace {
         return c == ',';
     }
 
+    bool iscseparator(char c) {
+        switch (c) {
+            case '!':
+            case '%':
+            case '&':
+            case '*':
+            case '+':
+            case ',':
+            case '-':
+            case '.':
+            case '/':
+            case ':':
+            case ';':
+            case '<':
+            case '=':
+            case '>':
+            case '?':
+            case '^':
+            case '|':
+            case '~':
+                return true;
+            default:
+                return false;
+        }
+    }
+
     bool istokseparator(char c) {
-        return isopening(c) || isclosing(c) || iscomma(c) || std::isspace(c); // todo : add C style punctuation
+        return isopening(c) || isclosing(c) || iscomma(c) || std::isspace(c) || iscseparator(c);
     }
 }
 
@@ -121,7 +147,6 @@ void ImEdit::editor::set_data(const std::string &data) {
 
 void ImEdit::editor::render() {
 
-    // TODO: wrapping (use BeginChild?)
     if (_longest_line_px == 0) {
         find_longest_line();
     }
@@ -374,34 +399,6 @@ ImEdit::editor::editor(std::string id) :
 {
     _cursors.emplace_back();
 }
-
-ImEdit::style ImEdit::editor::get_default_style() {
-    struct style s{};
-    s.cursor_color                                = ImColor(255, 255, 255, 255);
-    s.background_color                            = ImColor( 43,  43,  43, 255);
-    s.selection_color                             = ImColor( 33,  66, 131, 255);
-    s.line_number_color                           = ImColor(158, 160, 159, 255);
-    s.line_number_separator_color                 = ImColor( 55,  55,  55, 255);
-    s.current_line_color                          = ImColor( 50,  50,  50, 255);
-    s.token_colors[token_type::unknown]           = ImColor(  0,   0,   0, 255);
-    s.token_colors[token_type::keyword]           = ImColor(210,  40,  58, 255);
-    s.token_colors[token_type::comment]           = ImColor(120, 120, 120, 255);
-    s.token_colors[token_type::multiline_comment] = ImColor(120, 120, 120, 255);
-    s.token_colors[token_type::blank]             = ImColor(255, 255, 255, 175);
-    s.token_colors[token_type::variable]          = ImColor(209, 218, 218, 255);
-    s.token_colors[token_type::string_literal]    = ImColor(219, 193,  82, 255);
-    s.token_colors[token_type::num_literal]       = ImColor(169, 123, 227, 255);
-    s.token_colors[token_type::type]              = ImColor(167, 236,  33, 255);
-    s.token_colors[token_type::none]              = ImColor(255, 255, 255, 255);
-    s.token_colors[token_type::function]          = ImColor(238, 182,  98, 255);
-    s.token_colors[token_type::opening]           = ImColor(226, 214, 187, 255);
-    s.token_colors[token_type::closing]           = ImColor(226, 214, 187, 255);
-    s.token_colors[token_type::operator_]         = ImColor(249,  38, 114, 255);
-    s.token_colors[token_type::punctuation]       = ImColor(226, 214, 187, 255);
-    s.token_colors[token_type::max]               = ImColor(  0,   0,   0, 255);
-    return s;
-}
-
 
 void ImEdit::editor::move_cursors_up() {
     for (auto& cursor : _cursors) {
@@ -723,7 +720,9 @@ void ImEdit::editor::clear() {
     _cursors.clear();
     _tooltips.clear();
     _lines.clear();
+    _selections.clear();
     _last_frame_mouse_coords.reset();
+    _glyph_size.reset();
     _longest_line_idx = 0;
     _longest_line_px = 0;
 
@@ -889,7 +888,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         return;
     }
 
-    // check if we are at the last char, in which case we do nothing
+    // check if we are after the last char, in which case we do nothing
     if (co.line == _lines.size() - 1 && co.token == _lines.back().tokens.size() - 1 &&
         co.glyph == _lines.back().tokens.back().data.size()) {
         return;
@@ -897,7 +896,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
 
     assert(co.line < _lines.size());
     if (_lines[co.line].tokens.empty()) {
-    // deleting empty line
+        // deleting empty line
         _lines.erase(_lines.begin() + co.line);
         for (cursor& c : _cursors) {
             if (c.coord.line > co.line) {
@@ -1218,4 +1217,31 @@ void ImEdit::editor::input_char(ImWchar c) {
             _longest_line_idx = cursor.coord.line;
         }
     }
+}
+
+ImEdit::style ImEdit::editor::get_default_style() {
+    struct style s{};
+    s.cursor_color                                = ImColor(255, 255, 255, 255);
+    s.background_color                            = ImColor( 43,  43,  43, 255);
+    s.selection_color                             = ImColor( 33,  66, 131, 255);
+    s.line_number_color                           = ImColor(158, 160, 159, 255);
+    s.line_number_separator_color                 = ImColor( 55,  55,  55, 255);
+    s.current_line_color                          = ImColor( 50,  50,  50, 255);
+    s.token_colors[token_type::unknown]           = ImColor(  0,   0,   0, 255);
+    s.token_colors[token_type::keyword]           = ImColor(210,  40,  58, 255);
+    s.token_colors[token_type::comment]           = ImColor(120, 120, 120, 255);
+    s.token_colors[token_type::multiline_comment] = ImColor(120, 120, 120, 255);
+    s.token_colors[token_type::blank]             = ImColor(255, 255, 255, 175);
+    s.token_colors[token_type::variable]          = ImColor(209, 218, 218, 255);
+    s.token_colors[token_type::string_literal]    = ImColor(219, 193,  82, 255);
+    s.token_colors[token_type::num_literal]       = ImColor(169, 123, 227, 255);
+    s.token_colors[token_type::type]              = ImColor(167, 236,  33, 255);
+    s.token_colors[token_type::none]              = ImColor(255, 255, 255, 255);
+    s.token_colors[token_type::function]          = ImColor(238, 182,  98, 255);
+    s.token_colors[token_type::opening]           = ImColor(226, 214, 187, 255);
+    s.token_colors[token_type::closing]           = ImColor(226, 214, 187, 255);
+    s.token_colors[token_type::operator_]         = ImColor(249,  38, 114, 255);
+    s.token_colors[token_type::punctuation]       = ImColor(226, 214, 187, 255);
+    s.token_colors[token_type::max]               = ImColor(  0,   0,   0, 255);
+    return s;
 }

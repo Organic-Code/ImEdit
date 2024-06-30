@@ -124,7 +124,7 @@ namespace ImEdit {
 
     class editor {
     public:
-        explicit editor(std::string id);
+        explicit editor(std::string id); // id is passed down to imgui
 
         void render();
         void set_data(const std::string& data);
@@ -156,24 +156,24 @@ namespace ImEdit {
         void move_cursors_left_token(); // moves by one token to the left
         void move_cursors_right_token(); // moves by one token to the right
 
-        void input_char(ImWchar c);
+        void input_char(ImWchar c); // Simulates a keyboard input
 
         void clear();
 
-        void delete_glyph(coordinates);
+        void delete_glyph(coordinates); // deletes the glyph at the given coordinates, ie just before a cursor that would have those coordinates
 
-        void reset_font() noexcept {
+        void reset_font() const noexcept { // Call this whenever the font is modified
             _glyph_size.reset();
         }
 
-        static style get_default_style();
+        static style get_default_style(); // similar to monokai
 
-        bool _allow_keyboard_input{true};
-        bool _allow_mouse_input{true};
+        bool _allow_keyboard_input{true}; // set to false to inhibit keyboard management
+        bool _allow_mouse_input{true}; // set to false to inhibit mouse management
         bool _show_leading_space{true};
         unsigned int _tab_length{4};
-        std::optional<float> _height{};
-        std::optional<float> _width{};
+        std::optional<float> _height{}; // empty optional <=> height equal content size. value set to 0 <=> take all available height. Other <=> take specified height
+        std::optional<float> _width{}; // similar to _height
 
     private:
 
