@@ -156,13 +156,17 @@ void ImEdit::editor::render() {
 
     // space to the left for displaying line numbers, breakpoints, and such
     const auto extra_padding = compute_extra_padding();
+    const auto region_avail = ImGui::GetContentRegionAvail();
     const ImVec2 draw_region{std::max(_longest_line_px + extra_padding, _width ? *_width : 0),
-                             std::max(ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1), _height ? *_height : 0)};
+                             _height ?
+                                    *_height != 0 ? *_height : region_avail.y
+                                    : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size())};
 
-    ImVec2 window_region{
+    const ImVec2 window_region{
             std::min(_width ? *_width : _longest_line_px + extra_padding, ImGui::GetContentRegionAvail().x),
-            std::min(_height ? *_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1), ImGui::GetContentRegionAvail().y)
+            std::min(_height ? *_height : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size() + 1), region_avail.y)
     };
+
 
 
     if (!ImGui::BeginChild(_imgui_id.c_str(), window_region, ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar)) {
@@ -185,7 +189,7 @@ void ImEdit::editor::render() {
     }
 
     ImGui::InvisibleButton("invisible button",
-                           {draw_region.x, draw_region.y});
+                           {draw_region.x, std::max(draw_region.y, ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size()))});
 
     const auto rect_min = ImGui::GetItemRectMin();
     const auto rect_max = ImGui::GetItemRectMax();
@@ -201,6 +205,9 @@ void ImEdit::editor::render() {
 
     auto line_numbers_max_glyphs = std::to_string(_lines.size()).size();
     for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
+        // TODO do not render lines that are too much at the beginning or too much at the end (look-up for scroll)
+
+        // Do not render if out of draw region
         if (imgui_cursor.y > draw_region.y + _imgui_cursor_position.y) {
             break;
         }
