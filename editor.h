@@ -86,6 +86,12 @@ namespace ImEdit {
         std::optional<ImColor> background{};
     };
 
+    struct token_style {
+        ImColor color;
+        bool bold : 1; // You need to set editor::_bold_font (and eventually editor::_bold_italic_font) to use this
+        bool italic : 1; // You need to set editor::_italic_font (and eventually editor::_bold_italic_font) to use this
+    };
+
     struct style {
         ImColor cursor_color{};
         ImColor background_color{};
@@ -93,7 +99,7 @@ namespace ImEdit {
         ImColor line_number_color{};
         ImColor line_number_separator_color{};
         ImColor current_line_color{};
-        std::unordered_map<token_type::enum_, ImColor, token_type> token_colors{};
+        std::unordered_map<token_type::enum_, token_style, token_type> token_colors{};
     };
 
     struct coordinates {
@@ -162,7 +168,7 @@ namespace ImEdit {
 
         void delete_glyph(coordinates); // deletes the glyph at the given coordinates, ie just before a cursor that would have those coordinates
 
-        void reset_font() const noexcept { // Call this whenever the font is modified
+        void font_changed() const noexcept { // Call this whenever the font is modified
             _glyph_size.reset();
         }
 
@@ -174,6 +180,12 @@ namespace ImEdit {
         unsigned int _tab_length{4};
         std::optional<float> _height{}; // empty optional <=> height equal content size. value set to 0 <=> take all available height. Other <=> take specified height
         std::optional<float> _width{}; // similar to _height
+
+        // We are assuming the font and its variants are monospace.
+        ImFont* _default_font{nullptr}; // Call editor::font_changed after setting this. if nullptr, the font is not pushed in the ImGui stack at all
+        ImFont* _bold_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
+        ImFont* _italic_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
+        ImFont* _bold_italic_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
 
     private:
 

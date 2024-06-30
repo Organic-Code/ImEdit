@@ -146,6 +146,9 @@ void ImEdit::editor::set_data(const std::string &data) {
 }
 
 void ImEdit::editor::render() {
+    if (_default_font != nullptr) {
+        ImGui::PushFont(_default_font);
+    }
 
     if (_longest_line_px == 0) {
         find_longest_line();
@@ -164,6 +167,9 @@ void ImEdit::editor::render() {
 
     if (!ImGui::BeginChild(_imgui_id.c_str(), window_region, ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar)) {
         ImGui::EndChild();
+        if (_default_font != nullptr) {
+            ImGui::PopFont();
+        }
         return;
     }
 
@@ -311,7 +317,7 @@ void ImEdit::editor::render() {
             }
 
             // If you are getting an error here, maybe you defined your own token types and forgot to add them to ImEdit::editor.get_style().token_colors
-            const ImColor color = _style.token_colors.at(token.type);
+            const token_style style = _style.token_colors.at(token.type);
             const std::string& data = token.data;
 
 
@@ -328,7 +334,7 @@ void ImEdit::editor::render() {
                             draw_list->AddLine(
                                     ImVec2(imgui_cursor.x + 2, imgui_cursor.y + line_y_pos),
                                     ImVec2(imgui_cursor.x + tab_length - 2, imgui_cursor.y + line_y_pos),
-                                    color,
+                                    style.color,
                                     line_height);
                         }
                         imgui_cursor.x += tab_length;
@@ -338,7 +344,7 @@ void ImEdit::editor::render() {
                             draw_list->AddCircleFilled(
                                     ImVec2(imgui_cursor.x + space_length.x / 2, imgui_cursor.y + space_length.y / 2),
                                     ImGui::GetFontSize() / 10,
-                                    color
+                                    style.color
                                     );
                         }
                         imgui_cursor.x += space_length.x;
@@ -350,7 +356,28 @@ void ImEdit::editor::render() {
             else {
 
                 is_leading_space = false;
-                draw_list->AddText(imgui_cursor, color, data.data(), data.data() + data.size());
+
+                bool font_pushed = false;
+                if (style.bold) {
+                    if (style.italic) {
+                        if (_bold_italic_font != nullptr) {
+                            ImGui::PushFont(_bold_italic_font);
+                            font_pushed = true;
+                        }
+                    } else {
+                        if (_bold_font != nullptr) {
+                            ImGui::PushFont(_bold_font);
+                            font_pushed = true;
+                        }
+                    }
+                } else if (style.italic) {
+                    if (_italic_font != nullptr) {
+                        ImGui::PushFont(_italic_font);
+                        font_pushed = true;
+                    }
+                }
+
+                draw_list->AddText(imgui_cursor, style.color, data.data(), data.data() + data.size());
                 auto text_size = calc_text_size(data.data(), data.data() + data.size());
                 if (!token.tooltip.empty()) {
                     if (ImGui::IsMouseHoveringRect(imgui_cursor, imgui_cursor + text_size) && ImGui::IsItemHovered()) {
@@ -358,6 +385,10 @@ void ImEdit::editor::render() {
                         ImGui::Text("%s", token.tooltip.data()); // TODO
                         ImGui::EndTooltip();
                     }
+                }
+
+                if (font_pushed) {
+                    ImGui::PopFont();
                 }
 
                 imgui_cursor.x += text_size.x;
@@ -388,6 +419,10 @@ void ImEdit::editor::render() {
 
     ImGui::PopClipRect();
     ImGui::EndChild();
+
+    if (_default_font != nullptr) {
+        ImGui::PopFont();
+    }
 }
 
 
@@ -1227,21 +1262,21 @@ ImEdit::style ImEdit::editor::get_default_style() {
     s.line_number_color                           = ImColor(158, 160, 159, 255);
     s.line_number_separator_color                 = ImColor( 55,  55,  55, 255);
     s.current_line_color                          = ImColor( 50,  50,  50, 255);
-    s.token_colors[token_type::unknown]           = ImColor(  0,   0,   0, 255);
-    s.token_colors[token_type::keyword]           = ImColor(210,  40,  58, 255);
-    s.token_colors[token_type::comment]           = ImColor(120, 120, 120, 255);
-    s.token_colors[token_type::multiline_comment] = ImColor(120, 120, 120, 255);
-    s.token_colors[token_type::blank]             = ImColor(255, 255, 255, 175);
-    s.token_colors[token_type::variable]          = ImColor(209, 218, 218, 255);
-    s.token_colors[token_type::string_literal]    = ImColor(219, 193,  82, 255);
-    s.token_colors[token_type::num_literal]       = ImColor(169, 123, 227, 255);
-    s.token_colors[token_type::type]              = ImColor(167, 236,  33, 255);
-    s.token_colors[token_type::none]              = ImColor(255, 255, 255, 255);
-    s.token_colors[token_type::function]          = ImColor(238, 182,  98, 255);
-    s.token_colors[token_type::opening]           = ImColor(226, 214, 187, 255);
-    s.token_colors[token_type::closing]           = ImColor(226, 214, 187, 255);
-    s.token_colors[token_type::operator_]         = ImColor(249,  38, 114, 255);
-    s.token_colors[token_type::punctuation]       = ImColor(226, 214, 187, 255);
-    s.token_colors[token_type::max]               = ImColor(  0,   0,   0, 255);
+    s.token_colors[token_type::unknown]           = token_style{ImColor(  0,   0,   0, 255), false, false};
+    s.token_colors[token_type::keyword]           = token_style{ImColor(210,  40,  58, 255), false, false};
+    s.token_colors[token_type::comment]           = token_style{ImColor(120, 120, 120, 255), false,  true};
+    s.token_colors[token_type::multiline_comment] = token_style{ImColor(120, 120, 120, 255), false,  true};
+    s.token_colors[token_type::blank]             = token_style{ImColor(255, 255, 255, 175), false, false};
+    s.token_colors[token_type::variable]          = token_style{ImColor(209, 218, 218, 255), false, false};
+    s.token_colors[token_type::string_literal]    = token_style{ImColor(219, 193,  82, 255),  true, false};
+    s.token_colors[token_type::num_literal]       = token_style{ImColor(169, 123, 227, 255), false, false};
+    s.token_colors[token_type::type]              = token_style{ImColor(167, 236,  33, 255), false, false};
+    s.token_colors[token_type::none]              = token_style{ImColor(255, 255, 255, 255), false, false};
+    s.token_colors[token_type::function]          = token_style{ImColor(238, 182,  98, 255), false, false};
+    s.token_colors[token_type::opening]           = token_style{ImColor(226, 214, 187, 255), false, false};
+    s.token_colors[token_type::closing]           = token_style{ImColor(226, 214, 187, 255), false, false};
+    s.token_colors[token_type::operator_]         = token_style{ImColor(249,  38, 114, 255), false, false};
+    s.token_colors[token_type::punctuation]       = token_style{ImColor(226, 214, 187, 255), false, false};
+    s.token_colors[token_type::max]               = token_style{ImColor(  0,   0,   0, 255), false, false};
     return s;
 }
