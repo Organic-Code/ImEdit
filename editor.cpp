@@ -782,7 +782,37 @@ void ImEdit::editor::handle_kb_input() {
             }
         }
 
-        if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            // TODO : call lexer
+                for (cursor& c : _cursors) {
+                    _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
+                    if (!_lines[c.coord.line].tokens.empty()) {
+                        auto& line = _lines[c.coord.line];
+                        if (c.coord.glyph < line.tokens[c.coord.token].data.size()) {
+                            auto& original = line.tokens[c.coord.token];
+                            token tok;
+                            tok.data = original.data.substr(c.coord.glyph);
+                            original.tooltip = "";
+                            original.type = token_type::unknown;
+                            original.id &= std::byte(0);
+                            line.tokens[c.coord.token].data.erase(c.coord.glyph);
+                            _lines[c.coord.line + 1].tokens.emplace_back(std::move(tok));
+                        }
+                        while (c.coord.token + 1 < line.tokens.size()) {
+                            _lines[c.coord.line + 1].tokens.push_back(line.tokens[c.coord.token + 1]);
+                            line.tokens.erase(std::next(line.tokens.begin(), c.coord.token + 1));
+                        }
+                    }
+                    for (cursor& c2 : _cursors) {
+                        if (c2.coord.line > c.coord.line) {
+                            ++c2.coord.line;
+                        }
+                    }
+                    ++c.coord.line;
+                    c.coord.glyph = c.coord.token = c.wanted_column = 0;
+                }
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
             if (!_selections.empty()) {
                 delete_selections();
             } else {
@@ -791,30 +821,48 @@ void ImEdit::editor::handle_kb_input() {
                 }
             }
         }
-
-        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
+        else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
             move_cursors_down();
-        } else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
             move_cursors_up();
-        } else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
             move_cursors_left();
-        } else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
             move_cursors_right();
-        } else if (ImGui::IsKeyPressed(ImGuiKey_End)) {
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_End)) {
             move_cursors_to_end();
-        } else if (ImGui::IsKeyPressed(ImGuiKey_Home)) {
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_Home)) {
             move_cursors_to_beg();
         }
     }
 
     if (ctrl && !shift && !alt) {
-        if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
+        if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            // TODO call lexer
+            for (cursor& c : _cursors) {
+                _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
+                for (cursor& c2 : _cursors) {
+                    if (c2.coord.line > c.coord.line) {
+                        ++c2.coord.line;
+                    }
+                }
+            }
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
             // TODO scroll down
-        } else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
             // TODO scroll up
-        } else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
             move_cursors_left_token();
-        } else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
             move_cursors_right_token();
         }
     }
@@ -823,6 +871,9 @@ void ImEdit::editor::handle_kb_input() {
         delete_selections();
         for (ImWchar c : im_io.InputQueueCharacters) {
             for (cursor& cursor : _cursors) {
+                if (_lines[cursor.coord.line].tokens.empty()) {
+                    _lines[cursor.coord.line].tokens.push_back({"", token_type::unknown});
+                }
                 _lines[cursor.coord.line].tokens[cursor.coord.token].data.insert(cursor.coord.glyph, 1, c);
                 ++cursor.coord.glyph;
 
