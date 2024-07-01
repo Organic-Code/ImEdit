@@ -162,6 +162,9 @@ namespace ImEdit {
         [[nodiscard]] const std::vector<region>& get_selections() const noexcept { return _selections; }
         void delete_selections();
 
+        void copy_to_clipboard() const;
+        void paste_from_clipboard();
+
         void add_cursor(coordinates coords);
         void remove_cursor(coordinates coords);
 
@@ -174,7 +177,9 @@ namespace ImEdit {
         void move_cursors_left_token(); // moves by one token to the left
         void move_cursors_right_token(); // moves by one token to the right
 
-        void input_char(ImWchar c); // Simulates a keyboard input
+        void input_char_utf16(ImWchar c); // Simulates a keyboard input. Moves cursors
+        void input_raw_char(char c); // Inputs a specific char. Moves cursors. Do not use input_raw_char('\n'), use input_newline instead.
+        void input_newline(); // Inputs a new line. Moves cursors.
 
         void clear();
 

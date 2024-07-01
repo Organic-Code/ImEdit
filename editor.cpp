@@ -28,6 +28,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <sstream>
 #include "editor.h"
 
 namespace {
@@ -461,9 +462,6 @@ void ImEdit::editor::render() {
         if (ImGui::IsWindowFocused() || _tooltip_has_focus) {
             for (cursor &c: _cursors) {
                 if (i == c.coord.line) {
-                    ImGui::BeginTooltip();
-                    ImGui::Text("(%d, %d)", c.coord.token, c.coord.char_index);
-                    ImGui::EndTooltip();
                     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::system_clock::now().time_since_epoch());
                     time %= 1500;
@@ -906,41 +904,9 @@ void ImEdit::editor::handle_kb_input() {
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            delete_selections();
             // TODO : call lexer, also with previous data
-                for (cursor& c : _cursors) {
-                    _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
-
-                    // FIXME: creates empty tokens when repeatedly creating new lines in between tokens
-                    if (!_lines[c.coord.line].tokens.empty()) {
-                        auto& line = _lines[c.coord.line];
-                        if (c.coord.char_index < line.tokens[c.coord.token].data.size()) {
-                            auto& original = line.tokens[c.coord.token];
-                            token tok;
-                            tok.data = original.data.substr(c.coord.char_index);
-                            original.type = token_type::unknown;
-                            original.id &= std::byte(0);
-                            line.tokens[c.coord.token].data.erase(c.coord.char_index);
-                            _lines[c.coord.line + 1].tokens.emplace_back(std::move(tok));
-
-                            if (line.tokens[c.coord.token].data.empty()) {
-                                line.tokens.erase(std::next(line.tokens.begin(), c.coord.token));
-                                --c.coord.token;
-                            }
-                        }
-                        while (c.coord.token + 1 < line.tokens.size()) {
-                            _lines[c.coord.line + 1].tokens.push_back(line.tokens[c.coord.token + 1]);
-                            line.tokens.erase(std::next(line.tokens.begin(), c.coord.token + 1));
-                        }
-                    }
-
-                    for (cursor& c2 : _cursors) {
-                        if (c2.coord.line > c.coord.line) {
-                            ++c2.coord.line;
-                        }
-                    }
-                    ++c.coord.line;
-                    c.coord.char_index = c.coord.token = c.wanted_column = 0;
-                }
+            input_newline();
         }
         else if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
             if (!_selections.empty()) {
@@ -970,7 +936,7 @@ void ImEdit::editor::handle_kb_input() {
             move_cursors_to_beg();
         }
         else if (ImGui::IsKeyPressed(ImGuiKey_Tab)) {
-            input_char('\t');
+            input_char_utf16('\t');
         }
     }
 
@@ -998,12 +964,18 @@ void ImEdit::editor::handle_kb_input() {
         else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
             move_cursors_right_token();
         }
+        else if (ImGui::IsKeyPressed(ImGuiKey_V)) {
+            paste_from_clipboard();
+        }
+        else if (ImGui::IsKeyPressed(ImGuiKey_C)) {
+            copy_to_clipboard();
+        }
     }
 
     if (!im_io.InputQueueCharacters.empty()) {
         delete_selections();
         for (ImWchar c : im_io.InputQueueCharacters) {
-            input_char(c);
+            input_char_utf16(c);
         }
         im_io.InputQueueCharacters.resize(0); // resize(0) makes it so that we keep the memory buffer instead of discarding it
     }
@@ -1324,65 +1296,113 @@ void ImEdit::editor::delete_selections() {
             end = _selections[i].beg;
         }
 
-        // TODO
-
         _cursors[i].coord = beg;
         _cursors[i].wanted_column = column_count_to(beg);
     }
 }
 
-void ImEdit::editor::input_char(ImWchar c) {
-    // TODO utf8
-    for (cursor& cursor : _cursors) {
-        if (_lines[cursor.coord.line].tokens.empty()) {
-            _lines[cursor.coord.line].tokens.push_back({"", token_type::unknown});
+void ImEdit::editor::input_char_utf16(ImWchar ch) {
+    for (cursor& c : _cursors) {
+        if (_lines[c.coord.line].tokens.empty()) {
+            _lines[c.coord.line].tokens.push_back({"", token_type::unknown});
         }
-        auto& string = _lines[cursor.coord.line].tokens[cursor.coord.token].data;
+        auto& string = _lines[c.coord.line].tokens[c.coord.token].data;
 
         // Credits to these if branches: Dear ImGui
         // convert utf16 to utf8
         // TODO: does this work when IMGUI_USE_WCHAR32 is defined?
-        if (c < 0x80)
-        {
-            string.insert(cursor.coord.char_index, 1, (char)c);
-            cursor.coord.char_index += 1;
-        }
-        else if (c < 0x800)
-        {
-            string.insert(cursor.coord.char_index, 1, (char)(0xC0 + (c >> 6)));
-            string.insert(cursor.coord.char_index + 1, 1, (char)(0x80 + (c & 0x3f)));
-            cursor.coord.char_index += 2;
-        }
-        else if (c >= 0xdc00 && c < 0xe000)
-        {
+        auto advance = 0;
+        if (ch < 0x80) {
+            string.insert(c.coord.char_index, 1, (char) ch);
+            advance += 1;
+        } else if (ch < 0x800) {
+            string.insert(c.coord.char_index, 1, (char) (0xC0 + (ch >> 6)));
+            string.insert(c.coord.char_index + 1, 1, (char) (0x80 + (ch & 0x3f)));
+            advance += 2;
+        } else if (ch >= 0xdc00 && ch < 0xe000) {
             // Do nothing
-        }
-        else if (c >= 0xd800 && c < 0xdc00)
+        } else if (ch >= 0xd800 && ch < 0xdc00) {
+            string.insert(c.coord.char_index, 1, (char) (0xf0 + (ch >> 18)));
+            string.insert(c.coord.char_index + 1, 1, (char) (0x80 + ((ch >> 12) & 0x3f)));
+            string.insert(c.coord.char_index + 2, 1, (char) (0x80 + ((ch >> 6) & 0x3f)));
+            string.insert(c.coord.char_index + 3, 1, (char) (0x80 + ((ch) & 0x3f)));
+            advance += 4;
+        } else //if (c < 0x10000)
         {
-            string.insert(cursor.coord.char_index, 1, (char)(0xf0 + (c >> 18)));
-            string.insert(cursor.coord.char_index + 1, 1, (char)(0x80 + ((c >> 12) & 0x3f)));
-            string.insert(cursor.coord.char_index + 2, 1, (char)(0x80 + ((c >> 6) & 0x3f)));
-            string.insert(cursor.coord.char_index + 3, 1, (char)(0x80 + ((c) & 0x3f)));
-            cursor.coord.char_index += 4;
-        }
-        else //if (c < 0x10000)
-        {
-            string.insert(cursor.coord.char_index, 1, (char)(0xe0 + (c >> 12)));
-            string.insert(cursor.coord.char_index + 1, 1, (char)(0x80 + ((c >> 6) & 0x3f)));
-            string.insert(cursor.coord.char_index + 2, 1, (char)(0x80 + ((c) & 0x3f)));
-            cursor.coord.char_index += 3;
+            string.insert(c.coord.char_index, 1, (char) (0xe0 + (ch >> 12)));
+            string.insert(c.coord.char_index + 1, 1, (char) (0x80 + ((ch >> 6) & 0x3f)));
+            string.insert(c.coord.char_index + 2, 1, (char) (0x80 + ((ch) & 0x3f)));
+            advance += 3;
         }
 
 
-        auto length = calc_line_size(cursor.coord.line);
+        auto length = calc_line_size(c.coord.line);
         if (length > _longest_line_px) {
             _longest_line_px = length;
-            _longest_line_idx = cursor.coord.line;
+            _longest_line_idx = c.coord.line;
         }
+
+        for (cursor& c2 : _cursors) {
+            if (c.coord.line == c2.coord.line && c.coord.token == c2.coord.token && c.coord.char_index < c2.coord.char_index) {
+                c2.coord.char_index += advance;
+            }
+        }
+        c.coord.char_index += advance;
     }
 }
 
-#include <iostream>
+void ImEdit::editor::input_raw_char(char ch) {
+    assert(ch != '\n' && "Call input_newline() instead");
+    for (cursor& c : _cursors) {
+        if (_lines[c.coord.line].tokens.empty()) {
+            _lines[c.coord.line].tokens.push_back({"", token_type::unknown});
+        }
+        _lines[c.coord.line].tokens[c.coord.token].data.insert(c.coord.char_index, 1, ch);
+
+        for (cursor& c2 : _cursors) {
+            if (c.coord.line == c2.coord.line && c.coord.token == c2.coord.token && c.coord.char_index < c2.coord.char_index) {
+                c2.coord.char_index++; // just inserted a char before that cursor
+            }
+        }
+        c.coord.char_index++; // inserted a char at this index
+    }
+}
+
+void ImEdit::editor::input_newline() {
+    for (cursor& c : _cursors) {
+        _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
+
+        if (!_lines[c.coord.line].tokens.empty()) {
+            auto& line = _lines[c.coord.line];
+            if (c.coord.char_index < line.tokens[c.coord.token].data.size()) {
+                auto& original = line.tokens[c.coord.token];
+                token tok;
+                tok.data = original.data.substr(c.coord.char_index);
+                original.type = token_type::unknown;
+                original.id &= std::byte(0);
+                line.tokens[c.coord.token].data.erase(c.coord.char_index);
+                _lines[c.coord.line + 1].tokens.emplace_back(std::move(tok));
+
+                if (line.tokens[c.coord.token].data.empty()) {
+                    line.tokens.erase(std::next(line.tokens.begin(), c.coord.token));
+                    --c.coord.token;
+                }
+            }
+            while (c.coord.token + 1 < line.tokens.size()) {
+                _lines[c.coord.line + 1].tokens.push_back(line.tokens[c.coord.token + 1]);
+                line.tokens.erase(std::next(line.tokens.begin(), c.coord.token + 1));
+            }
+        }
+
+        for (cursor& c2 : _cursors) {
+            if (c2.coord.line > c.coord.line) {
+                ++c2.coord.line;
+            }
+        }
+        ++c.coord.line;
+        c.coord.char_index = c.coord.token = c.wanted_column = 0;
+    }
+}
 
 void ImEdit::editor::show_tooltip() {
 
@@ -1438,6 +1458,88 @@ void ImEdit::editor::font_changed() const noexcept {
 void ImEdit::editor::set_data(std::deque<line> lines) {
     clear();
     _lines = std::move(lines);
+}
+
+void ImEdit::editor::copy_to_clipboard() const {
+    std::ostringstream oss;
+    bool is_first_selection{true};
+    for (const region& select : _selections) {
+        if (coordinates_eq(select.beg, select.end)) {
+            continue;
+        }
+
+        if (!is_first_selection) {
+            oss << '\n';
+        }
+
+        region fixed{};
+        if (coordinates_lt(select.beg, select.end)) {
+            fixed = select;
+        }
+        else {
+            fixed.beg = select.end;
+            fixed.end = select.beg;
+        }
+
+        if (fixed.beg.line == fixed.end.line) {
+            if (fixed.beg.token == fixed.end.token) {
+                oss << _lines[fixed.beg.line].tokens[fixed.beg.token].data.substr(
+                            fixed.beg.char_index,
+                            fixed.end.char_index - fixed.beg.char_index
+                        );
+            } else {
+                oss << _lines[fixed.beg.line].tokens[fixed.beg.token].data.substr(fixed.beg.char_index);
+                for (unsigned int i = fixed.beg.token + 1; i < fixed.end.token; ++i) {
+                    oss << _lines[fixed.beg.line].tokens[i].data;
+                }
+                oss << _lines[fixed.end.line].tokens[fixed.end.token].data.substr(0, fixed.end.char_index);
+            }
+        }
+        else {
+            if (!_lines[fixed.beg.line].tokens.empty()) {
+                oss << _lines[fixed.beg.line].tokens[fixed.beg.token].data.substr(fixed.beg.char_index);
+                for (unsigned int i = fixed.beg.token + 1; i < _lines[fixed.beg.line].tokens.size(); ++i) {
+                    oss << _lines[fixed.beg.line].tokens[i].data;
+                }
+            }
+            oss << '\n';
+            for (unsigned int i = fixed.beg.line + 1; i < fixed.end.line; ++i) {
+                for (const auto &tok: _lines[i].tokens) {
+                    oss << tok.data;
+                }
+                oss << '\n';
+            }
+            if (!_lines[fixed.end.line].tokens.empty()) {
+                for (unsigned int i = 0; i < fixed.end.token ; ++i) {
+                    oss << _lines[fixed.end.line].tokens[i].data;
+                }
+                oss << _lines[fixed.end.line].tokens[fixed.end.token].data.substr(0, fixed.end.char_index);
+            }
+        }
+    }
+
+    ImGui::SetClipboardText(oss.str().c_str());
+}
+
+void ImEdit::editor::paste_from_clipboard() {
+    delete_selections();
+    const char* str = ImGui::GetClipboardText();
+
+    while (*str != '\0') {
+        auto length = char_count_for_utf8(*str);
+        bool compound = length > 1;
+        while (--length) {
+            input_raw_char(*str++);
+            assert(*str != '\0');
+        }
+
+        if (!compound && *str == '\n') {
+            input_newline();
+        } else {
+            input_raw_char(*str);
+        }
+        ++str;
+    }
 }
 
 ImEdit::style ImEdit::editor::get_default_style() {
