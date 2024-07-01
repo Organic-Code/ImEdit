@@ -82,6 +82,46 @@ namespace {
     bool istokseparator(char c) {
         return isopening(c) || isclosing(c) || iscomma(c) || std::isspace(c) || iscseparator(c);
     }
+
+    unsigned int char_count_for_utf8(char beg) noexcept {
+        if ((beg & 0b1000'0000) == 0b0000'0000) {
+            return 1;
+        }
+
+        if ((beg & 0b1110'0000) == 0b1100'0000) {
+            return 2;
+        }
+
+        if ((beg & 0b1111'0000) == 0b1110'0000) {
+            return 3;
+        }
+
+        if ((beg & 0b1111'1000) == 0b1111'0000) {
+            return 4;
+        }
+
+        assert(false && "Invalid UTF8 glyph head");
+        return 1;
+    }
+
+    // returns true if within a utf8 char, but returns false if in an ascii char or at the head of an utf8 char
+    bool is_within_utf8(char c) {
+        return (c & 0b1100'0000) == 0b1000'0000;
+    }
+
+    unsigned int char_count_for_utf8(ImWchar beg) noexcept {
+        return char_count_for_utf8(static_cast<char>(beg));
+    }
+
+    std::size_t utf8_string_size(const std::string& str) {
+        std::size_t char_count = 0;
+        for (unsigned int i = 0 ; i < str.size() ; i += char_count_for_utf8(str[i])) {
+            ++char_count;
+        }
+
+        return char_count;
+    }
+
 }
 
 void ImEdit::editor::set_data(const std::string &data) {
@@ -225,6 +265,7 @@ void ImEdit::editor::render() {
         // drawing line numbers
         auto line_number = std::to_string(i);
         auto extra_shift = static_cast<float>(line_numbers_max_glyphs - line_number.size()) * space_length.x;
+
         draw_list->AddText({imgui_cursor.x + extra_shift, imgui_cursor.y}, _style.line_number_color,
                            line_number.c_str());
 
@@ -262,7 +303,7 @@ void ImEdit::editor::render() {
             if (min.line == i) {
                 if (max.line == i) {
                     // selected = [column(min), column(max)]
-                    if (min.token != 0 || min.glyph != 0) {
+                    if (min.token != 0 || min.char_index != 0) {
                         select_draw_start = {
                                 imgui_cursor.x + static_cast<float>(column_count_to(min)) * glyph_size().x,
                                 imgui_cursor.y
@@ -276,7 +317,7 @@ void ImEdit::editor::render() {
                     };
                 } else {
                     // selected = [column(min), end_of_line]
-                    if (min.token != 0 || min.glyph != 0) {
+                    if (min.token != 0 || min.char_index != 0) {
                         select_draw_start = {
                                 imgui_cursor.x + static_cast<float>(column_count_to(min)) * glyph_size().x,
                                 imgui_cursor.y
@@ -422,6 +463,9 @@ void ImEdit::editor::render() {
         if (ImGui::IsWindowFocused() || _tooltip_has_focus) {
             for (cursor &c: _cursors) {
                 if (i == c.coord.line) {
+                    ImGui::BeginTooltip();
+                    ImGui::Text("(%d, %d)", c.coord.token, c.coord.char_index);
+                    ImGui::EndTooltip();
                     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
                             std::chrono::system_clock::now().time_since_epoch());
                     time %= 1500;
@@ -507,7 +551,7 @@ void ImEdit::editor::move_cursors_right() {
 
 ImEdit::coordinates ImEdit::editor::move_coordinates_up(coordinates coord, unsigned int wanted_column) const noexcept {
     if (coord.line == 0) {
-        coord.glyph = 0;
+        coord.char_index = 0;
         coord.token = 0;
         return coord;
     }
@@ -520,7 +564,7 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_up(coordinates coord, unsig
 ImEdit::coordinates ImEdit::editor::move_coordinates_down(coordinates coord, unsigned int wanted_column) const noexcept {
     if (coord.line == _lines.size() - 1) {
         coord.token = _lines.back().tokens.size() - 1;
-        coord.glyph = _lines.back().tokens.back().data.size();
+        coord.char_index = _lines.back().tokens.back().data.size();
         return coord;
     }
 
@@ -529,8 +573,8 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_down(coordinates coord, uns
 }
 
 ImEdit::coordinates ImEdit::editor::move_coordinates_left(coordinates coord) const noexcept {
-    if (coord.glyph > 0) {
-        --coord.glyph;
+    if (coord.char_index > 0) {
+        while (coord.char_index-- > 0 &&  is_within_utf8(_lines[coord.line].tokens[coord.token].data[coord.char_index]));
         return coord;
     }
 
@@ -539,9 +583,10 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_left(coordinates coord) con
 
         const auto& sz = _lines[coord.line].tokens[coord.token].data.size();
         if (sz == 0) {
-            coord.glyph = 0;
+            coord.char_index = 0;
         } else {
-            coord.glyph = sz - 1;
+            coord.char_index = sz;
+            while (coord.char_index-- > 0 &&  is_within_utf8(_lines[coord.line].tokens[coord.token].data[coord.char_index]));
         }
         return coord;
     }
@@ -550,10 +595,10 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_left(coordinates coord) con
         --coord.line;
         if (_lines[coord.line].tokens.empty()) {
             coord.token = 0;
-            coord.glyph = 0;
+            coord.char_index = 0;
         } else {
             coord.token = _lines[coord.line].tokens.size() - 1;
-            coord.glyph = _lines[coord.line].tokens.back().data.size();
+            coord.char_index = _lines[coord.line].tokens.back().data.size();
         }
         return coord;
     }
@@ -569,21 +614,27 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_right(coordinates coord) co
         return coord;
     }
 
-    if (coord.glyph < _lines[coord.line].tokens[coord.token].data.size()) {
-        ++coord.glyph;
+    if (coord.char_index < _lines[coord.line].tokens[coord.token].data.size()) {
+        coord.char_index += char_count_for_utf8(_lines[coord.line].tokens[coord.token].data[coord.char_index]);
         return coord;
     }
 
+    // End of token: moving to next token, after first glyph
     if (coord.token < _lines[coord.line].tokens.size() - 1) {
         ++coord.token;
-        coord.glyph = 1;
+        if (_lines[coord.line].tokens[coord.token].data.empty()) {
+            coord.char_index = 0;
+        }
+        else {
+            coord.char_index = char_count_for_utf8(_lines[coord.line].tokens[coord.token].data.front());
+        }
         return coord;
     }
 
     if (coord.line < _lines.size() - 1) {
         ++coord.line;
         coord.token = 0;
-        coord.glyph = 0;
+        coord.char_index = 0;
         return coord;
     }
     return coord;
@@ -593,7 +644,7 @@ void ImEdit::editor::move_cursors_to_end() {
     for (auto& cursor : _cursors) {
         if (!_lines[cursor.coord.line].tokens.empty()) {
             cursor.coord.token = _lines[cursor.coord.line].tokens.size() - 1;
-            cursor.coord.glyph = _lines[cursor.coord.line].tokens.back().data.size();
+            cursor.coord.char_index = _lines[cursor.coord.line].tokens.back().data.size();
             cursor.wanted_column = column_count_to(cursor.coord);
         }
     }
@@ -604,7 +655,7 @@ void ImEdit::editor::move_cursors_to_end() {
 void ImEdit::editor::move_cursors_to_beg() {
     for (auto& cursor : _cursors) {
         cursor.coord.token = 0;
-        cursor.coord.glyph = 0;
+        cursor.coord.char_index = 0;
         cursor.wanted_column = 0;
     }
     _selections.clear();
@@ -612,14 +663,13 @@ void ImEdit::editor::move_cursors_to_beg() {
 }
 
 void ImEdit::editor::move_cursors_left_token() {
-    // TODO: change for going from word to word instead of from token to token ?
     for (auto& cursor : _cursors) {
-        if (cursor.coord.glyph > 0) {
-            cursor.coord.glyph = 0;
+        if (cursor.coord.char_index > 0) {
+            cursor.coord.char_index = 0;
         }
         else if (cursor.coord.token > 0) {
             --cursor.coord.token;
-            // cursor.coord.glyph == 0
+            // cursor.coord.char_index == 0
         }
         else {
             cursor.coord = move_coordinates_left(cursor.coord); // just one left: previous line
@@ -638,12 +688,12 @@ void ImEdit::editor::move_cursors_right_token() {
         if (_lines[cursor.coord.line].tokens.empty()) { // NOLINT(*-branch-clone)
             cursor.coord = move_coordinates_right(cursor.coord);
         }
-        else if (auto glyph_count = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size() ; cursor.coord.glyph < glyph_count) {
-            cursor.coord.glyph = glyph_count;
+        else if (auto char_count = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size() ; cursor.coord.char_index < char_count) {
+            cursor.coord.char_index = char_count;
         }
         else if (cursor.coord.token + 1 < _lines[cursor.coord.line].tokens.size()) {
             ++cursor.coord.token;
-            cursor.coord.glyph = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size();
+            cursor.coord.char_index = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size();
         }
         else {
             cursor.coord = move_coordinates_right(cursor.coord); // just one right: next line
@@ -658,7 +708,7 @@ void ImEdit::editor::move_cursors_right_token() {
 
 
 unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const noexcept {
-    if (coord.token == 0 && coord.glyph == 0) {
+    if (coord.token == 0 && coord.char_index == 0) {
         return 0;
     }
 
@@ -668,7 +718,7 @@ unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const no
     }
 
     assert(coord.token < _lines[coord.line].tokens.size());
-    assert(coord.glyph <= _lines[coord.line].tokens[coord.token].data.size());
+    assert(coord.char_index <= _lines[coord.line].tokens[coord.token].data.size());
 
     unsigned int glyph_count = 0;
     for (unsigned int i = 0 ; i < coord.token; ++i) {
@@ -683,13 +733,13 @@ unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const no
                 }
             }
         } else {
-            glyph_count += _lines[coord.line].tokens[i].data.size();
+            glyph_count += utf8_string_size(_lines[coord.line].tokens[i].data);
         }
     }
 
     const token& tok = _lines[coord.line].tokens[coord.token];
     if (tok.type == token_type::blank) {
-        for (unsigned int i = 0 ; i < coord.glyph ; ++i) {
+        for (unsigned int i = 0 ; i < coord.char_index ; ++i) {
             if (tok.data[i] == '\t') {
                 glyph_count += _tab_length - glyph_count % _tab_length;
             } else {
@@ -697,7 +747,7 @@ unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const no
             }
         }
     } else {
-        glyph_count += coord.glyph;
+        glyph_count += utf8_string_size(tok.data.substr(0, coord.char_index));
     }
     return glyph_count;
 }
@@ -708,7 +758,7 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
     coordinates coord;
     coord.line = line;
     coord.token = 0;
-    coord.glyph = 0;
+    coord.char_index = 0;
 
     if (_lines[coord.line].tokens.empty()) {
         return coord;
@@ -716,7 +766,7 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
 
     auto is_last_glyph = [this](coordinates coord) {
         return coord.token == _lines[coord.line].tokens.size() - 1
-                && coord.glyph == _lines[coord.line].tokens[coord.token].data.size();
+                && coord.char_index == _lines[coord.line].tokens[coord.token].data.size();
     };
 
     while (column_count_to(coord) < column_count && !is_last_glyph(coord)) {
@@ -724,10 +774,10 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
     }
 
     auto& str = _lines[coord.line].tokens[coord.token].data;
-    if (coord.glyph != 0 && str[coord.glyph - 1] == '\t') {
+    if (coord.char_index != 0 && str[coord.char_index - 1] == '\t') {
         auto actual_tab_length = _tab_length - column_count % _tab_length;
         if (actual_tab_length != _tab_length && actual_tab_length >= _tab_length / 2) {
-            --coord.glyph;
+            while (coord.char_index-- > 0 &&  is_within_utf8(_lines[coord.line].tokens[coord.token].data[coord.char_index]));
         }
     }
 
@@ -763,7 +813,7 @@ void ImEdit::editor::manage_extra_cursors() {
 void ImEdit::editor::add_cursor(coordinates coords) {
     assert(coords.line < _lines.size());
     assert(coords.token < _lines[coords.line].tokens.size());
-    assert(coords.glyph <= _lines[coords.line].tokens[coords.token].data.size());
+    assert(coords.char_index <= _lines[coords.line].tokens[coords.token].data.size());
 
     _cursors.push_back({coords, column_count_to(coords)});
     manage_extra_cursors();
@@ -823,7 +873,7 @@ float ImEdit::editor::calc_line_size(unsigned int line, float space_size) const 
     coordinates c;
     c.line = line;
     c.token = _lines[line].tokens.size() - 1;
-    c.glyph = _lines[line].tokens.back().data.size();
+    c.char_index = _lines[line].tokens.back().data.size();
 
     return static_cast<float>(column_count_to(c)) * space_size;
 }
@@ -862,15 +912,17 @@ void ImEdit::editor::handle_kb_input() {
             // TODO : call lexer
                 for (cursor& c : _cursors) {
                     _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
+
+                    // FIXME: creates empty tokens when repeatedly creating new lines in between tokens
                     if (!_lines[c.coord.line].tokens.empty()) {
                         auto& line = _lines[c.coord.line];
-                        if (c.coord.glyph < line.tokens[c.coord.token].data.size()) {
+                        if (c.coord.char_index < line.tokens[c.coord.token].data.size()) {
                             auto& original = line.tokens[c.coord.token];
                             token tok;
-                            tok.data = original.data.substr(c.coord.glyph);
+                            tok.data = original.data.substr(c.coord.char_index);
                             original.type = token_type::unknown;
                             original.id &= std::byte(0);
-                            line.tokens[c.coord.token].data.erase(c.coord.glyph);
+                            line.tokens[c.coord.token].data.erase(c.coord.char_index);
                             _lines[c.coord.line + 1].tokens.emplace_back(std::move(tok));
                         }
                         while (c.coord.token + 1 < line.tokens.size()) {
@@ -878,13 +930,14 @@ void ImEdit::editor::handle_kb_input() {
                             line.tokens.erase(std::next(line.tokens.begin(), c.coord.token + 1));
                         }
                     }
+
                     for (cursor& c2 : _cursors) {
                         if (c2.coord.line > c.coord.line) {
                             ++c2.coord.line;
                         }
                     }
                     ++c.coord.line;
-                    c.coord.glyph = c.coord.token = c.wanted_column = 0;
+                    c.coord.char_index = c.coord.token = c.wanted_column = 0;
                 }
         }
         else if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
@@ -956,19 +1009,19 @@ void ImEdit::editor::handle_kb_input() {
 
 void ImEdit::editor::delete_glyph(coordinates co) {
     // nothing to delete
-    if (co.token == 0 && co.glyph == 0 && co.line == 0) {
+    if (co.token == 0 && co.char_index == 0 && co.line == 0) {
         return;
     }
 
     // check if we are after the last char, in which case we do nothing
     if (co.line == _lines.size() - 1 && co.token == _lines.back().tokens.size() - 1 &&
-        co.glyph == _lines.back().tokens.back().data.size()) {
+        co.char_index == _lines.back().tokens.back().data.size()) {
         return;
     }
 
     assert(co.line < _lines.size());
+    // deleting empty line
     if (_lines[co.line].tokens.empty()) {
-        // deleting empty line
         _lines.erase(_lines.begin() + co.line);
         for (cursor& c : _cursors) {
             if (c.coord.line > co.line) {
@@ -978,10 +1031,10 @@ void ImEdit::editor::delete_glyph(coordinates co) {
                 --c.coord.line;
                 if (_lines[c.coord.line].tokens.empty()) {
                     c.coord.token = 0;
-                    c.coord.glyph = 0;
+                    c.coord.char_index = 0;
                 } else {
                     c.coord.token = _lines[c.coord.line].tokens.size() - 1;
-                    c.coord.glyph = _lines[c.coord.line].tokens.back().data.size();
+                    c.coord.char_index = _lines[c.coord.line].tokens.back().data.size();
                 }
             }
         }
@@ -990,18 +1043,17 @@ void ImEdit::editor::delete_glyph(coordinates co) {
 
 
     assert(co.token < _lines[co.line].tokens.size());
-    assert(co.glyph <= _lines[co.line].tokens[co.token].data.size());
+    assert(co.char_index <= _lines[co.line].tokens[co.token].data.size());
 
-    if (co.token == 0 && co.glyph == 0) {
     // Deleting an equivalent of '\n'
-
-        const std::size_t original_line_tok_count =_lines[co.line - 1].tokens.size();
-        for (token& tok : _lines[co.line].tokens) {
+    if (co.token == 0 && co.char_index == 0) {
+        const std::size_t original_line_tok_count = _lines[co.line - 1].tokens.size();
+        for (token &tok: _lines[co.line].tokens) {
             _lines[co.line - 1].tokens.emplace_back(std::move(tok));
         }
         _lines.erase(_lines.begin() + co.line);
 
-        for (cursor& c : _cursors) {
+        for (cursor &c: _cursors) {
             if (c.coord.line == co.line) {
                 --c.coord.line;
                 c.coord.token += original_line_tok_count;
@@ -1015,25 +1067,28 @@ void ImEdit::editor::delete_glyph(coordinates co) {
             _longest_line_px = length;
             _longest_line_idx = co.line - 1;
         }
-
-    } else {
+    }
+    else {
     // Deleting a regular glyph
 
         for (cursor& cursor : _cursors) {
-            if (cursor.coord.line == co.line && cursor.coord.token == co.token && cursor.coord.glyph >= co.glyph) {
+            if (cursor.coord.line == co.line && cursor.coord.token == co.token && cursor.coord.char_index >= co.char_index) {
                 cursor.coord = move_coordinates_left(cursor.coord);
             }
         }
 
-        if (co.glyph == 0) {
+        if (co.char_index == 0) {
             assert(co.token > 0);
             --co.token;
-            co.glyph = _lines[co.line].tokens[co.token].data.size();
+            co.char_index = _lines[co.line].tokens[co.token].data.size();
+            assert(co.char_index != 0 && "Sumbled upon an empty token. This should never happen, please check your lexer.");
         }
 
+        auto& str = _lines[co.line].tokens[co.token].data;
+        while (co.char_index-- > 0 &&  is_within_utf8(str[co.char_index]));
+        str.erase(co.char_index, char_count_for_utf8(str[co.char_index]));
 
         // Deleting token if empty
-        _lines[co.line].tokens[co.token].data.erase(co.glyph - 1, 1);
         if (_lines[co.line].tokens[co.token].data.empty()) {
             _lines[co.line].tokens.erase(_lines[co.line].tokens.begin() + co.token);
 
@@ -1041,7 +1096,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
                 if (cursor.coord.line == co.line) {
                     if (cursor.coord.token == co.token) {
                         // Moving cursor away from current token (that was deleted) while keeping it at the same position
-                        if (cursor.coord.token != 0 || cursor.coord.glyph != 0) {
+                        if (cursor.coord.token != 0 || cursor.coord.char_index != 0) {
                             cursor.coord = move_coordinates_right(move_coordinates_left(cursor.coord));
                         }
 
@@ -1071,7 +1126,7 @@ void ImEdit::editor::handle_mouse_input() {
 
     if (ImGui::IsMouseDragging(0) && _last_frame_mouse_coords) {
         if (mouse_coord.is_left) {
-            mouse_coord.token = mouse_coord.glyph = 0;
+            mouse_coord.token = mouse_coord.char_index = 0;
         }
         coordinates coord = mouse_coord.as_default_coords();
 
@@ -1080,7 +1135,7 @@ void ImEdit::editor::handle_mouse_input() {
             _selections.emplace_back();
             coordinates previous_coord = _last_frame_mouse_coords->as_default_coords();
             if (_last_frame_mouse_coords->is_left) {
-                previous_coord.token = previous_coord.glyph = 0;
+                previous_coord.token = previous_coord.char_index = 0;
             }
             _selections.back().beg = previous_coord;
             _selections.back().end = coord;
@@ -1137,14 +1192,14 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
 
     if (pos.x < 0) {
         coords.is_left = true;
-        coords.token = coords.glyph = 0;
+        coords.token = coords.char_index = 0;
         return coords;
     }
     auto base_coords = coordinates_for(static_cast<unsigned>(std::round(pos.x / glyph_size.x)), line);
 
 
     coords.token = base_coords.token;
-    coords.glyph = base_coords.glyph;
+    coords.char_index = base_coords.char_index;
 
     return coords;
 }
@@ -1161,7 +1216,7 @@ bool ImEdit::editor::coordinates_eq(coordinates lhs, coordinates rhs) const noex
     }
 
     if (lhs.token == rhs.token) {
-        if (lhs.glyph == rhs.glyph) {
+        if (lhs.char_index == rhs.char_index) {
             return true;
         }
         return false;
@@ -1176,7 +1231,7 @@ bool ImEdit::editor::coordinates_eq(coordinates lhs, coordinates rhs) const noex
             return false;
         }
 
-        if (lhs.glyph == _lines[lhs.line].tokens[lhs.token].data.size() && rhs.glyph == 0) {
+        if (lhs.char_index == _lines[lhs.line].tokens[lhs.token].data.size() && rhs.char_index == 0) {
             return true;
         }
         return false;
@@ -1199,7 +1254,7 @@ bool ImEdit::editor::coordinates_lt(coordinates lhs, coordinates rhs) const noex
             return true;
         }
         else {
-            if (lhs.glyph == _lines[lhs.line].tokens[lhs.token].data.size() && rhs.glyph == 0) {
+            if (lhs.char_index == _lines[lhs.line].tokens[lhs.token].data.size() && rhs.char_index == 0) {
                 return false;
             }
             else {
@@ -1213,7 +1268,7 @@ bool ImEdit::editor::coordinates_lt(coordinates lhs, coordinates rhs) const noex
 
     // same token
 
-    if (lhs.glyph < rhs.glyph) {
+    if (lhs.char_index < rhs.char_index) {
         return true;
     }
     else {
@@ -1280,8 +1335,42 @@ void ImEdit::editor::input_char(ImWchar c) {
         if (_lines[cursor.coord.line].tokens.empty()) {
             _lines[cursor.coord.line].tokens.push_back({"", token_type::unknown});
         }
-        _lines[cursor.coord.line].tokens[cursor.coord.token].data.insert(cursor.coord.glyph, 1, c);
-        ++cursor.coord.glyph;
+        auto& string = _lines[cursor.coord.line].tokens[cursor.coord.token].data;
+
+        // Credits to these if branches: Dear ImGui
+        // convert utf16 to utf8
+        // TODO: does this work when IMGUI_USE_WCHAR32 is defined?
+        if (c < 0x80)
+        {
+            string.insert(cursor.coord.char_index, 1, (char)c);
+            cursor.coord.char_index += 1;
+        }
+        else if (c < 0x800)
+        {
+            string.insert(cursor.coord.char_index, 1, (char)(0xC0 + (c >> 6)));
+            string.insert(cursor.coord.char_index + 1, 1, (char)(0x80 + (c & 0x3f)));
+            cursor.coord.char_index += 2;
+        }
+        else if (c >= 0xdc00 && c < 0xe000)
+        {
+            // Do nothing
+        }
+        else if (c >= 0xd800 && c < 0xdc00)
+        {
+            string.insert(cursor.coord.char_index, 1, (char)(0xf0 + (c >> 18)));
+            string.insert(cursor.coord.char_index + 1, 1, (char)(0x80 + ((c >> 12) & 0x3f)));
+            string.insert(cursor.coord.char_index + 2, 1, (char)(0x80 + ((c >> 6) & 0x3f)));
+            string.insert(cursor.coord.char_index + 3, 1, (char)(0x80 + ((c) & 0x3f)));
+            cursor.coord.char_index += 4;
+        }
+        else //if (c < 0x10000)
+        {
+            string.insert(cursor.coord.char_index, 1, (char)(0xe0 + (c >> 12)));
+            string.insert(cursor.coord.char_index + 1, 1, (char)(0x80 + ((c >> 6) & 0x3f)));
+            string.insert(cursor.coord.char_index + 2, 1, (char)(0x80 + ((c) & 0x3f)));
+            cursor.coord.char_index += 3;
+        }
+
 
         auto length = calc_line_size(cursor.coord.line);
         if (length > _longest_line_px) {
@@ -1338,6 +1427,15 @@ void ImEdit::editor::reset_current_tooltip() {
     _tooltip_chrono.reset();
     _tooltip_last_hovered_at = std::chrono::system_clock::now() - _tooltip_grace_period - std::chrono::milliseconds(1);
     _tooltip_has_focus = false;
+}
+
+void ImEdit::editor::font_changed() const noexcept {
+    _glyph_size.reset();
+}
+
+void ImEdit::editor::set_data(std::deque<line> lines) {
+    clear();
+    _lines = std::move(lines);
 }
 
 ImEdit::style ImEdit::editor::get_default_style() {

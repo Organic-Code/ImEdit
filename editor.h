@@ -126,7 +126,7 @@ namespace ImEdit {
     struct coordinates {
         unsigned int line{};
         unsigned int token{};
-        unsigned int glyph{}; // index within the token
+        unsigned int char_index{}; // index within the token
     };
 
     // used to represent coordinates that can be to the left of the glyphs (in the numbers column)
@@ -134,7 +134,7 @@ namespace ImEdit {
         bool is_left{false}; // true: token == 0, glyph indicates how many glyphs to the left the coord is.
 
         [[nodiscard]] coordinates as_default_coords() const noexcept {
-            return {line, token, glyph};
+            return {line, token, char_index};
         }
     };
 
@@ -155,13 +155,11 @@ namespace ImEdit {
 
         void render();
         void set_data(const std::string& data);
-        void set_data(std::deque<line> lines) {
-            clear();
-            _lines = std::move(lines);
-        }
+        void set_data(std::deque<line> lines);
+        [[nodiscard]] const std::deque<line>& get_data() const noexcept { return _lines; }
 
         void add_selection(region r) noexcept;
-        const std::vector<region>& get_selections() const noexcept { return _selections; }
+        [[nodiscard]] const std::vector<region>& get_selections() const noexcept { return _selections; }
         void delete_selections();
 
         void add_cursor(coordinates coords);
@@ -182,9 +180,7 @@ namespace ImEdit {
 
         void delete_glyph(coordinates); // deletes the glyph at the given coordinates, ie just before a cursor that would have those coordinates
 
-        void font_changed() const noexcept { // Call this whenever the font is modified
-            _glyph_size.reset();
-        }
+        void font_changed() const noexcept; // Call this whenever the font is modified
 
         void reset_current_tooltip();
 
@@ -220,7 +216,8 @@ namespace ImEdit {
         // Counts the number of columns in the line in order to attain the specified coordinates
         [[nodiscard]] unsigned int column_count_to(coordinates) const noexcept;
 
-        // Returns the coordinates for given line such that column_count_to(coordinates) returns column_count, if possible for that line
+        // Returns the coordinates for given line such that column_count_to(coordinates) returns column_count, if possible for that line.
+        // if not possible, returns the max column
         [[nodiscard]] coordinates coordinates_for(unsigned int column_count, unsigned int line) const noexcept;
 
         [[nodiscard]] coordinates move_coordinates_up(coordinates, unsigned int wanted_column) const noexcept;
