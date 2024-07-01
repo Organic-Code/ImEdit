@@ -355,8 +355,6 @@ void ImEdit::editor::render() {
             }
         }
 
-        // TODO: scrolling : ne pas tout rendre ?
-
         bool is_leading_space = true;
         unsigned int column = 0;
 
@@ -683,7 +681,6 @@ void ImEdit::editor::move_cursors_left_token() {
 
 
 void ImEdit::editor::move_cursors_right_token() {
-    // TODO: change for going from word to word instead of from token to token ? Or let this be decided by the lexer ?
     for (auto& cursor : _cursors) {
         if (_lines[cursor.coord.line].tokens.empty()) { // NOLINT(*-branch-clone)
             cursor.coord = move_coordinates_right(cursor.coord);
@@ -909,7 +906,7 @@ void ImEdit::editor::handle_kb_input() {
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-            // TODO : call lexer
+            // TODO : call lexer, also with previous data
                 for (cursor& c : _cursors) {
                     _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
 
@@ -924,6 +921,11 @@ void ImEdit::editor::handle_kb_input() {
                             original.id &= std::byte(0);
                             line.tokens[c.coord.token].data.erase(c.coord.char_index);
                             _lines[c.coord.line + 1].tokens.emplace_back(std::move(tok));
+
+                            if (line.tokens[c.coord.token].data.empty()) {
+                                line.tokens.erase(std::next(line.tokens.begin(), c.coord.token));
+                                --c.coord.token;
+                            }
                         }
                         while (c.coord.token + 1 < line.tokens.size()) {
                             _lines[c.coord.line + 1].tokens.push_back(line.tokens[c.coord.token + 1]);
@@ -974,7 +976,7 @@ void ImEdit::editor::handle_kb_input() {
 
     if (ctrl && !shift && !alt) {
         if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-            // TODO call lexer
+            // TODO call lexer, also with previous data
             for (cursor& c : _cursors) {
                 _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
                 for (cursor& c2 : _cursors) {
@@ -985,10 +987,10 @@ void ImEdit::editor::handle_kb_input() {
             }
         }
         else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
-            // TODO scroll down
+            ImGui::SetScrollY(ImGui::GetScrollY() + ImGui::GetTextLineHeightWithSpacing());
         }
         else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
-            // TODO scroll up
+            ImGui::SetScrollY(ImGui::GetScrollY() - ImGui::GetTextLineHeightWithSpacing());
         }
         else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
             move_cursors_left_token();
