@@ -269,6 +269,7 @@ namespace ImEdit {
         std::optional<decltype(_tooltips)::iterator> _tooltip{};
         std::optional<std::chrono::system_clock::time_point> _tooltip_chrono{};
         std::chrono::system_clock::time_point _tooltip_last_hovered_at{};
+        bool _tooltip_has_focus{false};
 
         mutable std::optional<ImVec2> _glyph_size{};
     };

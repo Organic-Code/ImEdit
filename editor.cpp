@@ -419,7 +419,7 @@ void ImEdit::editor::render() {
         }
 
         // Render cursor
-        if (ImGui::IsWindowFocused()) {
+        if (ImGui::IsWindowFocused() || _tooltip_has_focus) {
             for (cursor &c: _cursors) {
                 if (i == c.coord.line) {
                     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -799,7 +799,6 @@ void ImEdit::editor::clear() {
     _longest_line_px = 0;
 
     _cursors.emplace_back();
-    _tooltip_data = nullptr;
     reset_current_tooltip();
 }
 
@@ -1316,7 +1315,11 @@ void ImEdit::editor::show_tooltip() {
                        (*_tooltip)->second);
             if (ImGui::IsWindowFocused()) {
                 handle_kb_input();
+                _tooltip_has_focus = true;
+            } else {
+                _tooltip_has_focus = false;
             }
+
             if (!ImGui::IsWindowAppearing() && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem)) {
                 if (std::chrono::system_clock::now() - _tooltip_last_hovered_at > _tooltip_grace_period) {
                     _tooltip.reset();
@@ -1333,6 +1336,8 @@ void ImEdit::editor::reset_current_tooltip() {
     _tooltip.reset();
     _tooltip_pos.reset();
     _tooltip_chrono.reset();
+    _tooltip_last_hovered_at = std::chrono::system_clock::now() - _tooltip_grace_period - std::chrono::milliseconds(1);
+    _tooltip_has_focus = false;
 }
 
 ImEdit::style ImEdit::editor::get_default_style() {
