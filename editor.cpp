@@ -1274,11 +1274,60 @@ void ImEdit::editor::delete_selections() {
             end = _selections[i].beg;
         }
 
-        // TODO
+        if (beg.line == end.line) {
+
+            auto& line = _lines[beg.line];
+            assert(!line.tokens.empty());
+            if (beg.token != end.token) {
+                line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1), std::next(line.tokens.begin(), end.token));
+                if (beg.char_index == 0) {
+                    line.tokens.erase(std::next(line.tokens.begin(), beg.token));
+                } else if (beg.char_index < line.tokens[beg.token].data.size()) {
+                    line.tokens[beg.token].data.erase(beg.char_index);
+                }
+                line.tokens[beg.token + 1].data.erase(0, end.char_index);
+            }
+            else {
+                line.tokens[beg.token].data.erase(beg.char_index, end.char_index - beg.char_index);
+            }
+
+        } else {
+            {
+                auto &beg_line = _lines[beg.line];
+                if (!beg_line.tokens.empty()) {
+                    if (beg.token + 1 < beg_line.tokens.size() - 1) {
+                        beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token + 1), beg_line.tokens.end());
+                    }
+                    if (beg.char_index == 0) {
+                        beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token));
+                    } else if (beg.char_index < beg_line.tokens[beg.token].data.size()) {
+                        beg_line.tokens[beg.token].data.erase(beg.char_index);
+                    }
+                }
+            } // beg_line invalidated after _lines.erase call
+
+            _lines.erase(std::next(_lines.begin(), beg.line + 1), std::next(_lines.begin(), end.line));
+
+            auto& end_line = _lines[beg.line + 1];
+            end_line.tokens.erase(end_line.tokens.begin(), std::next(end_line.tokens.begin(), end.token));
+            end_line.tokens.front().data.erase(0, end.char_index);
+            if (end_line.tokens.front().data.empty()) {
+                end_line.tokens.erase(end_line.tokens.begin());
+            }
+
+            for (token& tok : end_line.tokens) {
+                _lines[beg.line].tokens.emplace_back(std::move(tok));
+            }
+            _lines.erase(std::next(_lines.begin(), beg.line + 1));
+        }
+
+        // FIXME : shift next cursors (lines, token and/or glyph)
+        // FIXME : shift other selections
 
         _cursors[i].coord = beg;
         _cursors[i].wanted_column = column_count_to(beg);
     }
+    _selections.clear();
 }
 
 void ImEdit::editor::input_char_utf16(ImWchar ch) {
