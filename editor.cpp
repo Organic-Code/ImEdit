@@ -244,6 +244,17 @@ void ImEdit::editor::render() {
     handle_kb_input();
 
 
+    if (_scroll_up_next_frame) {
+        ImGui::SetScrollY(ImGui::GetScrollY() - ImGui::GetTextLineHeightWithSpacing() * 3);
+        _scroll_up_next_frame = false;
+    }
+
+    if (_scroll_down_next_frame) {
+        ImGui::SetScrollY(ImGui::GetScrollY() + ImGui::GetTextLineHeightWithSpacing() * 3);
+        _scroll_down_next_frame = false;
+    }
+
+
     auto line_numbers_max_glyphs = std::to_string(_lines.size()).size();
     auto tooltip_this_frame = _tooltips.end();
     for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
@@ -506,7 +517,8 @@ void ImEdit::editor::render() {
 ImEdit::editor::editor(std::string id) :
         _lines{},
         _style{get_default_style()},
-        _imgui_id{std::move(id)}
+        _imgui_id{std::move(id)},
+        _shortcuts{get_default_shortcuts()}
 {
     _cursors.emplace_back();
 }
@@ -832,6 +844,20 @@ void ImEdit::editor::remove_cursor(coordinates coords) {
 
 }
 
+bool ImEdit::editor::has_cursor(ImEdit::coordinates coords) {
+    return std::any_of(_cursors.begin(), _cursors.end(), [this, &coords](const cursor& c) {
+        return coordinates_eq(coords, c.coord);
+    });
+}
+
+ImEdit::coordinates ImEdit::editor::mouse_position() {
+    coordinates_cbl cbl = screen_to_token_coordinates(ImGui::GetMousePos());
+    if (cbl.is_left) {
+        cbl.token = cbl.char_index = 0;
+    }
+    return cbl.as_default_coords();
+}
+
 void ImEdit::editor::clear() {
     _cursors.clear();
     _tooltips.clear();
@@ -842,9 +868,9 @@ void ImEdit::editor::clear() {
     _glyph_size.reset();
     _longest_line_idx = 0;
     _longest_line_px = 0;
+    reset_current_tooltip();
 
     _cursors.emplace_back();
-    reset_current_tooltip();
 }
 
 void ImEdit::editor::find_longest_line() {
@@ -891,85 +917,35 @@ void ImEdit::editor::handle_kb_input() {
     const bool alt = im_io.ConfigMacOSXBehaviors ? im_io.KeyCtrl : im_io.KeyAlt;
     const bool ctrl = im_io.ConfigMacOSXBehaviors ? im_io.KeyAlt : im_io.KeyCtrl;
     const bool shift = im_io.KeyShift;
+    const bool super = im_io.KeySuper;
 
-    if (!ctrl && !shift && !alt) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
-            if (!_selections.empty()) {
-                delete_selections();
-            } else {
-                for (cursor &cursor: _cursors) {
-                    delete_glyph(move_coordinates_right(cursor.coord));
+    input::modifiers mod_flags = input::none;
+    mod_flags = static_cast<input::modifiers>((shift << 0) | (ctrl << 1) | (alt << 2) | (super << 3));
+
+
+
+
+    bool shortcut_triggered = false;
+    for (const auto& shortcut : _shortcuts) {
+
+        if (mod_flags == shortcut.first.mod_flag) {
+            bool all_key_pressed = true;
+            for (ImGuiKey k: shortcut.first.keys) {
+                if (!ImGui::IsKeyPressed(k)) {
+                    all_key_pressed = false;
+                    break;
                 }
             }
-        }
 
-        if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-            delete_selections();
-            // TODO : call lexer, also with previous data
-            input_newline();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
-            if (!_selections.empty()) {
-                delete_selections();
-            } else {
-                for (cursor &cursor: _cursors) {
-                    delete_glyph(cursor.coord);
-                }
+            if (all_key_pressed) {
+                shortcut_triggered = true;
+                shortcut.second(_shortcuts_data, *this);
             }
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
-            move_cursors_down();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
-            move_cursors_up();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
-            move_cursors_left();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
-            move_cursors_right();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_End)) {
-            move_cursors_to_end();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_Home)) {
-            move_cursors_to_beg();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_Tab)) {
-            input_char_utf16('\t');
         }
     }
 
-    if (ctrl && !shift && !alt) {
-        if (ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-            // TODO call lexer, also with previous data
-            for (cursor& c : _cursors) {
-                _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
-                for (cursor& c2 : _cursors) {
-                    if (c2.coord.line > c.coord.line) {
-                        ++c2.coord.line;
-                    }
-                }
-            }
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
-            ImGui::SetScrollY(ImGui::GetScrollY() + ImGui::GetTextLineHeightWithSpacing());
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
-            ImGui::SetScrollY(ImGui::GetScrollY() - ImGui::GetTextLineHeightWithSpacing());
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
-            move_cursors_left_token();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
-            move_cursors_right_token();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_V)) {
-            paste_from_clipboard();
-        }
-        else if (ImGui::IsKeyPressed(ImGuiKey_C)) {
-            copy_to_clipboard();
-        }
+    if (shortcut_triggered) {
+        return;
     }
 
     if (!im_io.InputQueueCharacters.empty()) {
@@ -982,6 +958,7 @@ void ImEdit::editor::handle_kb_input() {
 }
 
 void ImEdit::editor::delete_glyph(coordinates co) {
+    // TODO call lexer, also with previous data
     // nothing to delete
     if (co.token == 0 && co.char_index == 0 && co.line == 0) {
         return;
@@ -1282,6 +1259,7 @@ bool ImEdit::editor::coordinates_within(ImEdit::coordinates coord, ImEdit::regio
 }
 
 void ImEdit::editor::delete_selections() {
+    // TODO call lexer, also with previous data
 
     assert(_selections.empty() || _cursors.size() == _selections.size());
     for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
@@ -1295,6 +1273,8 @@ void ImEdit::editor::delete_selections() {
             beg = _selections[i].end;
             end = _selections[i].beg;
         }
+
+        // TODO
 
         _cursors[i].coord = beg;
         _cursors[i].wanted_column = column_count_to(beg);
@@ -1369,6 +1349,8 @@ void ImEdit::editor::input_raw_char(char ch) {
 }
 
 void ImEdit::editor::input_newline() {
+    // TODO : call lexer, also with previous data
+    delete_selections();
     for (cursor& c : _cursors) {
         _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
 
@@ -1401,6 +1383,37 @@ void ImEdit::editor::input_newline() {
         }
         ++c.coord.line;
         c.coord.char_index = c.coord.token = c.wanted_column = 0;
+    }
+}
+
+void ImEdit::editor::input_newline_nomove() {
+    for (cursor& c : _cursors) {
+        _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
+        for (cursor& c2 : _cursors) {
+            if (c2.coord.line > c.coord.line) {
+                ++c2.coord.line;
+            }
+        }
+    }
+}
+
+void ImEdit::editor::input_delete() {
+    if (!_selections.empty()) {
+        delete_selections();
+    } else {
+        for (cursor &cursor: _cursors) {
+            delete_glyph(move_coordinates_right(cursor.coord));
+        }
+    }
+}
+
+void ImEdit::editor::input_backspace() {
+    if (!_selections.empty()) {
+        delete_selections();
+    } else {
+        for (cursor &cursor: _cursors) {
+            delete_glyph(cursor.coord);
+        }
     }
 }
 
@@ -1516,6 +1529,8 @@ void ImEdit::editor::copy_to_clipboard() const {
                 oss << _lines[fixed.end.line].tokens[fixed.end.token].data.substr(0, fixed.end.char_index);
             }
         }
+
+        is_first_selection = false;
     }
 
     ImGui::SetClipboardText(oss.str().c_str());
@@ -1524,6 +1539,8 @@ void ImEdit::editor::copy_to_clipboard() const {
 void ImEdit::editor::paste_from_clipboard() {
     delete_selections();
     const char* str = ImGui::GetClipboardText();
+
+    // TODO: if str.line_count <= _cursors.size(), paste each line to a different cursor
 
     while (*str != '\0') {
         auto length = char_count_for_utf8(*str);
@@ -1540,6 +1557,55 @@ void ImEdit::editor::paste_from_clipboard() {
         }
         ++str;
     }
+}
+
+void ImEdit::editor::add_shortcut(input in, std::function<void(void *, editor &)> callback) {
+    _shortcuts.emplace_back(std::move(in), std::move(callback));
+}
+
+void ImEdit::editor::add_shortcut(input in, void (editor::*member_function)()) {
+    add_shortcut(std::move(in), [member_function](void*, editor& ed) {
+                     (ed.*member_function)();
+                 }
+    );
+}
+
+void ImEdit::editor::add_shortcut(input in, void (editor::*member_function)() const) {
+    add_shortcut(std::move(in), [member_function](void*, editor& ed) {
+                     (ed.*member_function)();
+                 }
+    );
+}
+
+std::vector<std::pair<ImEdit::input, std::function<void(void *, ImEdit::editor &)>>> ImEdit::editor::get_default_shortcuts() {
+    std::vector<std::pair<input, std::function<void(void *, editor &)>>> shortcuts;
+    auto add_memb_fn = [&shortcuts](input in, auto fn) {
+        shortcuts.emplace_back(std::move(in), [fn](void*, editor& ed) {
+            (ed.*fn)();
+        });
+    };
+
+    add_memb_fn({{ImGuiKey_Delete}, input::none}, &editor::input_delete);
+    add_memb_fn({{ImGuiKey_Enter}, input::none}, &editor::input_newline);
+    add_memb_fn({{ImGuiKey_Backspace}, input::none}, &editor::input_backspace);
+    add_memb_fn({{ImGuiKey_DownArrow}, input::none}, &editor::move_cursors_down);
+    add_memb_fn({{ImGuiKey_UpArrow}, input::none}, &editor::move_cursors_up);
+    add_memb_fn({{ImGuiKey_LeftArrow}, input::none}, &editor::move_cursors_left);
+    add_memb_fn({{ImGuiKey_RightArrow}, input::none}, &editor::move_cursors_right);
+    add_memb_fn({{ImGuiKey_End}, input::none}, &editor::move_cursors_to_end);
+    add_memb_fn({{ImGuiKey_Home}, input::none}, &editor::move_cursors_to_beg);
+    shortcuts.emplace_back(input{{ImGuiKey_Tab}, input::none}, [](void*, editor& ed) {
+        ed.input_char_utf16('\t');
+    });
+    add_memb_fn({{ImGuiKey_Enter}, input::control}, &editor::input_newline_nomove);
+    add_memb_fn({{ImGuiKey_DownArrow}, input::control}, &editor::scroll_down_next_frame);
+    add_memb_fn({{ImGuiKey_UpArrow}, input::control}, &editor::scroll_up_next_frame);
+    add_memb_fn({{ImGuiKey_LeftArrow}, input::control}, &editor::move_cursors_left_token);
+    add_memb_fn({{ImGuiKey_RightArrow}, input::control}, &editor::move_cursors_right_token);
+    add_memb_fn({{ImGuiKey_V}, input::control}, &editor::paste_from_clipboard);
+    add_memb_fn({{ImGuiKey_C}, input::control}, &editor::copy_to_clipboard);
+
+    return shortcuts;
 }
 
 ImEdit::style ImEdit::editor::get_default_style() {

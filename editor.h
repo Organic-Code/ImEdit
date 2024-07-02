@@ -53,7 +53,7 @@ namespace ImEdit {
     struct token_type {
         // You can add token types by defining IMEDIT_CUSTOM_TOKEN_TYPES.
         // IMEDIT_CUSTOM_TOKEN_TYPES must end with a comma
-        // Any token types added this way MUST be added to ImEdit::editor::_style.token_style
+        // Any token types added this way MUST be added to ImEdit::editor._style.token_style
         enum enum_ {
             unknown,
             keyword,
@@ -134,6 +134,7 @@ namespace ImEdit {
         bool is_left{false}; // true: token == 0, glyph indicates how many glyphs to the left the coord is.
 
         [[nodiscard]] coordinates as_default_coords() const noexcept {
+            assert(char_index >= 0);
             return {line, token, char_index};
         }
     };
@@ -146,6 +147,19 @@ namespace ImEdit {
     struct region {
         coordinates beg{};
         coordinates end{};
+    };
+
+    struct input {
+        enum modifiers : unsigned char {
+            none               = 0,
+            shift              = 1 << 0, // Shift
+            control            = 1 << 1, // Ctrl
+            alternate          = 1 << 2, // Alt
+            super              = 1 << 3, // meta/hyper/super/cmd
+        };
+
+        std::vector<ImGuiKey> keys;
+        modifiers mod_flag{none};
     };
 
 
@@ -167,6 +181,8 @@ namespace ImEdit {
 
         void add_cursor(coordinates coords);
         void remove_cursor(coordinates coords);
+        bool has_cursor(coordinates coords);
+        coordinates mouse_position();
 
         void move_cursors_up();
         void move_cursors_down();
@@ -180,6 +196,13 @@ namespace ImEdit {
         void input_char_utf16(ImWchar c); // Simulates a keyboard input. Moves cursors
         void input_raw_char(char c); // Inputs a specific char. Moves cursors. Do not use input_raw_char('\n'), use input_newline instead.
         void input_newline(); // Inputs a new line. Moves cursors.
+        void input_newline_nomove(); // Creates a new empty line. Does not move cursors
+        void input_delete(); // deletes the char after each cursor
+        void input_backspace(); // deletes the char before each cursor
+
+        // Call these if you want ImEdit to scroll up or down the next time it is rendered
+        void scroll_up_next_frame() noexcept { _scroll_up_next_frame = true; }
+        void scroll_down_next_frame() noexcept { _scroll_down_next_frame = true; }
 
         void clear();
 
@@ -189,6 +212,14 @@ namespace ImEdit {
 
         void reset_current_tooltip();
 
+        // _shortcuts_data can be set and will be passed as parameter to this callback
+        void add_shortcut(input in, std::function<void(void* shortcuts_data, editor& this_editor)> callback);
+        void add_shortcut(input in, void(editor::*member_function)());
+        void add_shortcut(input in, void(editor::*member_function)() const);
+        void clear_shortcuts() { _shortcuts.clear(); }
+
+
+        static std::vector<std::pair<input, std::function<void(void*, editor&)>>> get_default_shortcuts();
         static style get_default_style(); // similar to monokai
 
         bool _allow_keyboard_input{true}; // set to false to inhibit keyboard management
@@ -198,6 +229,7 @@ namespace ImEdit {
         std::optional<float> _height{}; // empty optional <=> height equal content size. value set to 0 <=> take all available height. Other <=> take specified height
         std::optional<float> _width{}; // similar to _height
 
+        // FIXME: set a single accessor for those variables?
         // We are assuming the font and its variants are monospace.
         ImFont* _default_font{nullptr}; // Call editor::font_changed after setting this. if nullptr, the font is not pushed in the ImGui stack at all
         ImFont* _bold_font{nullptr}; // if nullptr, the font is not pushed in the ImGui stack at all
@@ -215,6 +247,8 @@ namespace ImEdit {
         void* _tooltip_data{nullptr}; // Passed to tooltip callbacks as user data
         std::chrono::milliseconds _tooltip_delay{std::chrono::seconds(1)}; // Delay before the tooltip appears
         std::chrono::milliseconds _tooltip_grace_period{std::chrono::milliseconds(250)}; // Delay for which the tooltip stays up, even after the mouse went away
+
+        void* _shortcuts_data{nullptr}; // Passed to shortcut callbacks as user data
 
     private:
 
@@ -273,7 +307,12 @@ namespace ImEdit {
         std::chrono::system_clock::time_point _tooltip_last_hovered_at{};
         bool _tooltip_has_focus{false};
 
+        std::vector<std::pair<input, std::function<void(void* shortcuts_data, editor& this_editor)>>> _shortcuts{};
+
         mutable std::optional<ImVec2> _glyph_size{};
+
+        bool _scroll_up_next_frame{false};
+        bool _scroll_down_next_frame{false};
     };
 }
 
