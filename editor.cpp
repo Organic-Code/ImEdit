@@ -793,18 +793,74 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
 
 void ImEdit::editor::manage_extra_cursors() {
 
-    // TODO : Merge selections together and delete cursors accordingly
+    // Merging selections first.
+    bool perform_merge;
+    do {
+        perform_merge = false;
 
+        unsigned int a = _selections.size();
+        unsigned int b = a;
+        for (unsigned int i = 0; i < _selections.size() && !perform_merge; ++i) {
+            for (unsigned int j = 0; j < _selections.size(); ++j) {
+                if (i == j) {
+                    continue;
+                }
+
+                if (coordinates_lt_eq(_selections[j].beg, _selections[i].end)) {
+                    perform_merge = true; // merge to be performed;
+                    a = i;
+                    b = j;
+                    break;
+                }
+            }
+        }
+
+        if (perform_merge) {
+            if (coordinates_lt_eq(_selections[a].end, _selections[b].end)) {
+                _selections[a].end = _selections[b].end;
+            }
+            _selections.erase(std::next(_selections.begin(), b));
+        }
+
+    } while (perform_merge);
+
+
+    // Delete duplicate cursors
     bool delete_performed;
     do {
         delete_performed = false;
 
+
+        // FIXME: why restart the loops at 0 each time instead of resuming from index?
         auto to_erase = _cursors.end();
         for (auto it = _cursors.begin() ; it != _cursors.end() && to_erase == _cursors.end() ; ++it) {
             for (auto it2 = std::next(it) ; it2 != _cursors.end() ; ++it2) {
                 if (coordinates_eq(it->coord, it2->coord)) {
                     to_erase = it;
                     break;
+                }
+            }
+        }
+
+        if (to_erase != _cursors.end()) {
+            delete_performed = true;
+            _cursors.erase(to_erase);
+        }
+
+    } while (delete_performed);
+
+
+    // Delete cursors that are inside a selection
+    do {
+        delete_performed = false;
+
+
+        // FIXME: why restart the loops at 0 each time instead of resuming from index?
+        auto to_erase = _cursors.end();
+        for (auto it = _cursors.begin() ; it != _cursors.end() && to_erase == _cursors.end() ; ++it) {
+            for (const auto& select : _selections) {
+                if (coordinates_within(it->coord, select)) {
+                    to_erase = it;
                 }
             }
         }
@@ -1642,26 +1698,26 @@ std::vector<std::pair<ImEdit::input, std::function<void(void *, ImEdit::editor &
         });
     };
 
-    add_memb_fn({{ImGuiKey_Delete}, input::none}, &editor::input_delete);
-    add_memb_fn({{ImGuiKey_Enter}, input::none}, &editor::input_newline);
-    add_memb_fn({{ImGuiKey_Backspace}, input::none}, &editor::input_backspace);
-    add_memb_fn({{ImGuiKey_DownArrow}, input::none}, &editor::move_cursors_down);
-    add_memb_fn({{ImGuiKey_UpArrow}, input::none}, &editor::move_cursors_up);
-    add_memb_fn({{ImGuiKey_LeftArrow}, input::none}, &editor::move_cursors_left);
-    add_memb_fn({{ImGuiKey_RightArrow}, input::none}, &editor::move_cursors_right);
-    add_memb_fn({{ImGuiKey_End}, input::none}, &editor::move_cursors_to_end);
-    add_memb_fn({{ImGuiKey_Home}, input::none}, &editor::move_cursors_to_beg);
-    shortcuts.emplace_back(input{{ImGuiKey_Tab}, input::none}, [](void*, editor& ed) {
+    add_memb_fn({{ImGuiKey_Delete}, input::modifiers::none}, &editor::input_delete);
+    add_memb_fn({{ImGuiKey_Enter}, input::modifiers::none}, &editor::input_newline);
+    add_memb_fn({{ImGuiKey_Backspace}, input::modifiers::none}, &editor::input_backspace);
+    add_memb_fn({{ImGuiKey_DownArrow}, input::modifiers::none}, &editor::move_cursors_down);
+    add_memb_fn({{ImGuiKey_UpArrow}, input::modifiers::none}, &editor::move_cursors_up);
+    add_memb_fn({{ImGuiKey_LeftArrow}, input::modifiers::none}, &editor::move_cursors_left);
+    add_memb_fn({{ImGuiKey_RightArrow}, input::modifiers::none}, &editor::move_cursors_right);
+    add_memb_fn({{ImGuiKey_End}, input::modifiers::none}, &editor::move_cursors_to_end);
+    add_memb_fn({{ImGuiKey_Home}, input::modifiers::none}, &editor::move_cursors_to_beg);
+    shortcuts.emplace_back(input{{ImGuiKey_Tab}, input::modifiers::none}, [](void*, editor& ed) {
         ed.input_char_utf16('\t');
     });
-    add_memb_fn({{ImGuiKey_Enter}, input::control}, &editor::input_newline_nomove);
-    add_memb_fn({{ImGuiKey_DownArrow}, input::control}, &editor::scroll_down_next_frame);
-    add_memb_fn({{ImGuiKey_UpArrow}, input::control}, &editor::scroll_up_next_frame);
-    add_memb_fn({{ImGuiKey_LeftArrow}, input::control}, &editor::move_cursors_left_token);
-    add_memb_fn({{ImGuiKey_RightArrow}, input::control}, &editor::move_cursors_right_token);
-    add_memb_fn({{ImGuiKey_V}, input::control}, &editor::paste_from_clipboard);
-    add_memb_fn({{ImGuiKey_C}, input::control}, &editor::copy_to_clipboard);
-    add_memb_fn({{ImGuiKey_X}, input::control}, &editor::cut_to_clipboard);
+    add_memb_fn({{ImGuiKey_Enter}, input::modifiers::control}, &editor::input_newline_nomove);
+    add_memb_fn({{ImGuiKey_DownArrow}, input::modifiers::control}, &editor::scroll_down_next_frame);
+    add_memb_fn({{ImGuiKey_UpArrow}, input::modifiers::control}, &editor::scroll_up_next_frame);
+    add_memb_fn({{ImGuiKey_LeftArrow}, input::modifiers::control}, &editor::move_cursors_left_token);
+    add_memb_fn({{ImGuiKey_RightArrow}, input::modifiers::control}, &editor::move_cursors_right_token);
+    add_memb_fn({{ImGuiKey_V}, input::modifiers::control}, &editor::paste_from_clipboard);
+    add_memb_fn({{ImGuiKey_C}, input::modifiers::control}, &editor::copy_to_clipboard);
+    add_memb_fn({{ImGuiKey_X}, input::modifiers::control}, &editor::cut_to_clipboard);
 
     return shortcuts;
 }
