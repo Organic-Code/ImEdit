@@ -1168,7 +1168,7 @@ void ImEdit::editor::handle_mouse_input() {
         const bool shift = im_io.KeyShift;
 
         coordinates new_cursor_coords = mouse_coord.as_default_coords();
-        if (!alt || !shift) {
+        if (!ctrl) {
             _cursors.clear();
             _cursors.push_back({new_cursor_coords, column_count_to(new_cursor_coords)});
         } else {
@@ -1499,18 +1499,23 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
 void ImEdit::editor::input_raw_char(char ch) {
     assert(ch != '\n' && "Call input_newline() instead");
     for (cursor& c : _cursors) {
-        if (_lines[c.coord.line].tokens.empty()) {
-            _lines[c.coord.line].tokens.push_back({"", token_type::unknown});
-        }
-        _lines[c.coord.line].tokens[c.coord.token].data.insert(c.coord.char_index, 1, ch);
-
-        for (cursor& c2 : _cursors) {
-            if (c.coord.line == c2.coord.line && c.coord.token == c2.coord.token && c.coord.char_index < c2.coord.char_index) {
-                c2.coord.char_index++; // just inserted a char before that cursor
-            }
-        }
-        c.coord.char_index++; // inserted a char at this index
+        input_raw_char(ch, c);
     }
+}
+
+void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
+    assert(ch != '\n' && "Call input_newline() instead");
+    if (_lines[pos.coord.line].tokens.empty()) {
+        _lines[pos.coord.line].tokens.push_back({"", token_type::unknown});
+    }
+    _lines[pos.coord.line].tokens[pos.coord.token].data.insert(pos.coord.char_index, 1, ch);
+
+    for (cursor& c2 : _cursors) {
+        if (pos.coord.line == c2.coord.line && pos.coord.token == c2.coord.token && pos.coord.char_index < c2.coord.char_index) {
+            c2.coord.char_index++; // just inserted a char before that cursor
+        }
+    }
+    pos.coord.char_index++; // inserted a char at this index
 }
 
 void ImEdit::editor::input_newline() {
@@ -1703,25 +1708,46 @@ void ImEdit::editor::copy_to_clipboard() const {
 
 void ImEdit::editor::paste_from_clipboard() {
     delete_selections();
-    const char* str = ImGui::GetClipboardText();
+    std::string str = ImGui::GetClipboardText();
 
-    // TODO: if str.line_count <= _cursors.size(), paste each line to a different cursor
+    auto nb_lines = std::count(str.begin(), str.end(), '\n') + 1;
+    if (nb_lines == _cursors.size() && _cursors.size() != 1) {
 
-    while (*str != '\0') {
-        auto length = char_count_for_utf8(*str);
-        bool compound = length > 1;
-        while (--length) {
-            input_raw_char(*str++);
-            assert(*str != '\0');
+        auto cursors = _cursors;
+        std::sort(cursors.begin(), cursors.end(), [this](const cursor& lhs, const cursor& rhs) {
+            return coordinates_lt(lhs.coord, rhs.coord);
+        });
+
+        auto cursor = cursors.begin();
+        auto it = str.begin();
+        for (unsigned int i = 0 ; i < nb_lines ; ++i, ++cursor) {
+            while (*it != '\n' && *it != '\0') {
+                input_raw_char(*it++, *cursor);
+            }
+            if (*it != '\0') {
+                ++it;
+            }
         }
 
-        if (!compound && *str == '\n') {
-            input_newline();
-        } else {
-            input_raw_char(*str);
+    } else {
+        auto it = str.begin();
+        while (*it != '\0') {
+            auto length = char_count_for_utf8(*it);
+            bool compound = length > 1;
+            while (--length) {
+                input_raw_char(*it++);
+                assert(*it != '\0');
+            }
+
+            if (!compound && *it == '\n') {
+                input_newline();
+            } else {
+                input_raw_char(*it);
+            }
+            ++it;
         }
-        ++str;
     }
+    _longest_line_px = 0;
 }
 
 void ImEdit::editor::cut_to_clipboard() {

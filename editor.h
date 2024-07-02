@@ -287,6 +287,8 @@ namespace ImEdit {
         void handle_mouse_input();
         float compute_extra_padding() const noexcept;
 
+        void input_raw_char(char c, cursor& pos);
+
         void show_tooltip();
 
         std::vector<cursor> _cursors{};
