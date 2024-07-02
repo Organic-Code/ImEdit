@@ -164,6 +164,11 @@ namespace ImEdit {
 
 
     class editor {
+        /*************************************************************************************
+         *
+         * Public API
+         *
+         */
     public:
         explicit editor(std::string id); // id is passed down to imgui
 
@@ -251,6 +256,16 @@ namespace ImEdit {
 
         void* _shortcuts_data{nullptr}; // Passed to shortcut callbacks as user data
 
+
+
+
+
+
+    /*************************************************************************************
+     *
+     * Private methods and variables
+     *
+     */
     private:
 
         // Counts the number of columns in the line in order to attain the specified coordinates

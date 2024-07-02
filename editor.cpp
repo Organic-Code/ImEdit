@@ -1017,12 +1017,6 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         return;
     }
 
-    // check if we are after the last char, in which case we do nothing
-    if (co.line == _lines.size() - 1 && co.token == _lines.back().tokens.size() - 1 &&
-        co.char_index == _lines.back().tokens.back().data.size()) {
-        return;
-    }
-
     assert(co.line < _lines.size());
     // deleting empty line
     if (_lines[co.line].tokens.empty()) {
@@ -1572,7 +1566,12 @@ void ImEdit::editor::input_delete() {
         delete_selections();
     } else {
         for (cursor &cursor: _cursors) {
-            delete_glyph(move_coordinates_right(cursor.coord));
+            const auto& co = cursor.coord;
+            // Do nothing if we are after the last char of the last line
+            if (co.line != _lines.size() - 1 || co.token != _lines.back().tokens.size() - 1 ||
+                co.char_index != _lines.back().tokens.back().data.size()) {
+                delete_glyph(move_coordinates_right(cursor.coord));
+            }
         }
     }
 }
