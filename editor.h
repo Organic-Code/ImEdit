@@ -178,6 +178,7 @@ namespace ImEdit {
 
         void copy_to_clipboard() const;
         void paste_from_clipboard();
+        void cut_to_clipboard();
 
         void add_cursor(coordinates coords);
         void remove_cursor(coordinates coords);

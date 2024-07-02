@@ -1608,6 +1608,11 @@ void ImEdit::editor::paste_from_clipboard() {
     }
 }
 
+void ImEdit::editor::cut_to_clipboard() {
+    copy_to_clipboard();
+    delete_selections();
+}
+
 void ImEdit::editor::add_shortcut(input in, std::function<void(void *, editor &)> callback) {
     _shortcuts.emplace_back(std::move(in), std::move(callback));
 }
@@ -1653,6 +1658,7 @@ std::vector<std::pair<ImEdit::input, std::function<void(void *, ImEdit::editor &
     add_memb_fn({{ImGuiKey_RightArrow}, input::control}, &editor::move_cursors_right_token);
     add_memb_fn({{ImGuiKey_V}, input::control}, &editor::paste_from_clipboard);
     add_memb_fn({{ImGuiKey_C}, input::control}, &editor::copy_to_clipboard);
+    add_memb_fn({{ImGuiKey_X}, input::control}, &editor::cut_to_clipboard);
 
     return shortcuts;
 }
