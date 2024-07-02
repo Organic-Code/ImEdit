@@ -201,7 +201,7 @@ void ImEdit::editor::render() {
     const ImVec2 draw_region{std::max(_longest_line_px + extra_padding, _width ? *_width : 0),
                              _height ?
                                     *_height != 0 ? *_height : region_avail.y
-                                    : ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size())};
+                                    : std::min(ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size()), region_avail.y)};
 
     const ImVec2 window_region{
             std::min(_width ? *_width : _longest_line_px + extra_padding, ImGui::GetContentRegionAvail().x),
@@ -226,6 +226,10 @@ void ImEdit::editor::render() {
 
 
     if (draw_region.x == 0 || draw_region.y == 0) {
+        ImGui::EndChild();
+        if (_default_font != nullptr) {
+            ImGui::PopFont();
+        }
         return;
     }
 
@@ -234,37 +238,35 @@ void ImEdit::editor::render() {
 
     const auto rect_min = ImGui::GetItemRectMin();
     const auto rect_max = ImGui::GetItemRectMax();
-    ImGui::PushClipRect(rect_min, rect_max, true);
-
-    draw_list->AddRectFilled(imgui_cursor,
-                             {imgui_cursor.x + draw_region.x, imgui_cursor.y + draw_region.y},
-                             _style.background_color);
 
     handle_mouse_input();
     handle_kb_input();
 
 
     if (_scroll_up_next_frame) {
-        ImGui::SetScrollY(ImGui::GetScrollY() - ImGui::GetTextLineHeightWithSpacing() * 3);
+        ImGui::SetScrollY(ImGui::GetScrollY() - ImGui::GetTextLineHeightWithSpacing());
         _scroll_up_next_frame = false;
     }
 
     if (_scroll_down_next_frame) {
-        ImGui::SetScrollY(ImGui::GetScrollY() + ImGui::GetTextLineHeightWithSpacing() * 3);
+        ImGui::SetScrollY(ImGui::GetScrollY() + ImGui::GetTextLineHeightWithSpacing());
         _scroll_down_next_frame = false;
     }
 
-
     auto line_numbers_max_glyphs = std::to_string(_lines.size()).size();
+
+    auto first_rendered_line = static_cast<unsigned int>(std::floor(ImGui::GetScrollY()/ ImGui::GetTextLineHeightWithSpacing()));
+    auto last_rendered_line = first_rendered_line + static_cast<unsigned int>(draw_region.y / ImGui::GetTextLineHeightWithSpacing()) + 1;
+    last_rendered_line = std::min(last_rendered_line, static_cast<unsigned int>(_lines.size()));
+
+    imgui_cursor.y += ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(first_rendered_line);
+
+    draw_list->AddRectFilled(imgui_cursor,
+                             {imgui_cursor.x + draw_region.x, imgui_cursor.y + draw_region.y + ImGui::GetTextLineHeightWithSpacing() * 2},
+                             _style.background_color);
+
     auto tooltip_this_frame = _tooltips.end();
-    for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
-        // TODO do not render lines that are too much at the beginning or too much at the end (look-up for scroll)
-
-        // Do not render if out of draw region
-        if (imgui_cursor.y > draw_region.y + _imgui_cursor_position.y) {
-            break;
-        }
-
+    for (unsigned int i = first_rendered_line ; i < last_rendered_line ; ++i) {
         const line &line = _lines[i];
 
         assert(!_cursors.empty());
@@ -285,10 +287,6 @@ void ImEdit::editor::render() {
         draw_list->AddLine(imgui_cursor, {imgui_cursor.x, imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
                            _style.line_number_separator_color);
         imgui_cursor.x += 5;
-
-        if (imgui_cursor.y >= draw_region.y + _imgui_cursor_position.y) {
-            break;
-        }
 
         if (line.background) {
             draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x,
@@ -493,7 +491,6 @@ void ImEdit::editor::render() {
         imgui_cursor.y += ImGui::GetTextLineHeightWithSpacing();
     }
 
-    ImGui::PopClipRect();
     ImGui::EndChild();
 
     if (tooltip_this_frame == _tooltips.end() && std::chrono::system_clock::now() - _tooltip_last_hovered_at > _tooltip_grace_period) {
@@ -1131,8 +1128,11 @@ void ImEdit::editor::handle_mouse_input() {
         return;
     }
 
-    ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
     auto mouse_coord = screen_to_token_coordinates(ImGui::GetMousePos());
+
+    if (!mouse_coord.is_left) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
+    }
 
     if (ImGui::IsMouseDragging(0) && _last_frame_mouse_coords) {
         if (mouse_coord.is_left) {
