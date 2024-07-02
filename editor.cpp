@@ -790,37 +790,7 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
 
 void ImEdit::editor::manage_extra_cursors() {
 
-    // Merging selections first.
-    bool perform_merge;
-    do {
-        perform_merge = false;
-
-        unsigned int a = _selections.size();
-        unsigned int b = a;
-        for (unsigned int i = 0; i < _selections.size() && !perform_merge; ++i) {
-            for (unsigned int j = 0; j < _selections.size(); ++j) {
-                if (i == j) {
-                    continue;
-                }
-
-                if (coordinates_lt_eq(_selections[j].beg, _selections[i].end)) {
-                    perform_merge = true; // merge to be performed;
-                    a = i;
-                    b = j;
-                    break;
-                }
-            }
-        }
-
-        if (perform_merge) {
-            if (coordinates_lt_eq(_selections[a].end, _selections[b].end)) {
-                _selections[a].end = _selections[b].end;
-            }
-            _selections.erase(std::next(_selections.begin(), b));
-        }
-
-    } while (perform_merge);
-
+    merge_selections();
 
     // Delete duplicate cursors
     bool delete_performed;
@@ -868,6 +838,55 @@ void ImEdit::editor::manage_extra_cursors() {
         }
 
     } while (delete_performed);
+}
+
+void ImEdit::editor::clear_cursors_within_selections() {
+    for (const region& select : _selections) {
+        unsigned int idx = 0;
+        while (idx < _cursors.size()) {
+            if (coordinates_within_ex(_cursors[idx].coord, select)) {
+                _cursors.erase(std::next(_cursors.begin(), idx));
+            } else {
+                ++idx;
+            }
+        }
+    }
+    if (_cursors.empty()) {
+        _cursors.emplace_back();
+    }
+}
+
+void ImEdit::editor::merge_selections() {
+    // Merging selections first.
+    bool perform_merge;
+    do {
+        perform_merge = false;
+
+        unsigned int a = _selections.size();
+        unsigned int b = a;
+        for (unsigned int i = 0; i < _selections.size() && !perform_merge; ++i) {
+            for (unsigned int j = 0; j < _selections.size(); ++j) {
+                if (i == j) {
+                    continue;
+                }
+
+                if (coordinates_eq(_selections[j].beg, _selections[i].end)) {
+                    perform_merge = true; // merge to be performed;
+                    a = i;
+                    b = j;
+                    break;
+                }
+            }
+        }
+
+        if (perform_merge) {
+            if (coordinates_lt_eq(_selections[a].end, _selections[b].end)) {
+                _selections[a].end = _selections[b].end;
+            }
+            _selections.erase(std::next(_selections.begin(), b));
+        }
+
+    } while (perform_merge);
 }
 
 void ImEdit::editor::add_cursor(coordinates coords) {
@@ -1128,10 +1147,11 @@ void ImEdit::editor::handle_mouse_input() {
         ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
     }
 
-    if (ImGui::IsMouseDragging(0) && _last_frame_mouse_coords) {
-        if (mouse_coord.is_left) {
-            mouse_coord.token = mouse_coord.char_index = 0;
-        }
+    if (mouse_coord.is_left) {
+        mouse_coord.token = mouse_coord.char_index = 0;
+    }
+
+    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) && _last_frame_mouse_coords) {
         coordinates coord = mouse_coord.as_default_coords();
 
         // left click dragging = update selection
@@ -1152,26 +1172,54 @@ void ImEdit::editor::handle_mouse_input() {
         _cursors.push_back({coord, column_count_to(coord)});
     }
 
-    if (ImGui::IsMouseClicked(0)) {
+    ImGuiIO &im_io = ImGui::GetIO();
+    const bool alt = im_io.ConfigMacOSXBehaviors ? im_io.KeyCtrl : im_io.KeyAlt;
+    const bool ctrl = im_io.ConfigMacOSXBehaviors ? im_io.KeyAlt : im_io.KeyCtrl;
+    const bool shift = im_io.KeyShift;
 
-        _selections.clear();
 
-        ImGuiIO &im_io = ImGui::GetIO();
-        const bool alt = im_io.ConfigMacOSXBehaviors ? im_io.KeyCtrl : im_io.KeyAlt;
-        const bool ctrl = im_io.ConfigMacOSXBehaviors ? im_io.KeyAlt : im_io.KeyCtrl;
-        const bool shift = im_io.KeyShift;
 
-        coordinates new_cursor_coords = mouse_coord.as_default_coords();
+    bool is_in_a_selection = false;
+    coordinates coord = mouse_coord.as_default_coords();
+    for (const auto& sel : _selections) {
+        if (coordinates_within(coord, sel)) {
+            is_in_a_selection = true;
+            break;
+        }
+    }
+
+    if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+        coordinates sel_beg = coord;
+        sel_beg.char_index = 0;
+        coordinates sel_end = coord;
+        sel_end.char_index = _lines[sel_end.line].tokens[sel_end.token].data.size();
+
+        cursor cursor{sel_end, column_count_to(sel_end)};
         if (!ctrl) {
+            _selections.clear();
+            _selections.push_back({sel_beg, sel_end});
             _cursors.clear();
-            _cursors.push_back({new_cursor_coords, column_count_to(new_cursor_coords)});
+            _cursors.emplace_back(cursor);
         } else {
+            _selections.push_back({sel_beg, sel_end});
+            _cursors.emplace_back(cursor);
+        }
+        merge_selections();
+        clear_cursors_within_selections();
+    }
+    else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        if (!ctrl) {
+            _selections.clear();
+            _cursors.clear();
+            _cursors.push_back({coord, column_count_to(coord)});
+        }
+        else if (ctrl) {
 
-            auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &new_cursor_coords](const cursor &cursor) {
-                return coordinates_eq(cursor.coord, new_cursor_coords);
+            auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &coord](const cursor &cursor) {
+                return coordinates_eq(cursor.coord, coord);
             });
             if (it == _cursors.end()) {
-                _cursors.push_back({new_cursor_coords, column_count_to(new_cursor_coords)});
+                _cursors.push_back({coord, column_count_to(coord)});
             } else if (_cursors.size() > 1) { // don’t erase last cursor
                 _cursors.erase(it);
             }
@@ -1309,6 +1357,13 @@ bool ImEdit::editor::coordinates_within(ImEdit::coordinates coord, ImEdit::regio
         std::swap(r.end, r.beg);
     }
     return coordinates_lt_eq(r.beg, coord) && coordinates_lt_eq(coord, r.end);
+}
+
+bool ImEdit::editor::coordinates_within_ex(ImEdit::coordinates coord, ImEdit::region r) const noexcept {
+    if (coordinates_lt(r.end, r.beg)) {
+        std::swap(r.end, r.beg);
+    }
+    return coordinates_lt(r.beg, coord) && coordinates_lt(coord, r.end);
 }
 
 void ImEdit::editor::delete_selections() {

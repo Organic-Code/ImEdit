@@ -170,11 +170,14 @@ namespace ImEdit {
         [[nodiscard]] bool coordinates_eq(coordinates lhs, coordinates rhs) const noexcept;
         [[nodiscard]] bool coordinates_lt(coordinates lhs, coordinates rhs) const noexcept;
         [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept;
+        [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
+        [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
 
         // Deletes cursors that are at the same place to leave only on of them,
         // and merges selections that should be merged together (when using multiple cursors)
         void manage_extra_cursors();
+        void clear_cursors_within_selections();
+        void merge_selections(); // merges contiguous selections
 
         [[nodiscard]] ImVec2 glyph_size() const noexcept;
 
