@@ -436,7 +436,7 @@ void ImEdit::editor::render() {
                 draw_list->AddText(imgui_cursor, style.color, data.data(), data.data() + data.size());
                 auto text_size = calc_text_size(data.data(), data.data() + data.size());
 
-                if (token.id != std::byte{0} && ImGui::IsMouseHoveringRect(imgui_cursor, imgui_cursor + text_size)
+                if (token.id != 0 && ImGui::IsMouseHoveringRect(imgui_cursor, imgui_cursor + text_size)
                     && ImGui::IsItemHovered()) {
                     auto tooltip = _tooltips.find(token);
                     if (tooltip != _tooltips.end()) {
@@ -1469,7 +1469,7 @@ void ImEdit::editor::input_newline() {
                 token tok;
                 tok.data = original.data.substr(c.coord.char_index);
                 original.type = token_type::unknown;
-                original.id &= std::byte(0);
+                original.id = 0;
                 line.tokens[c.coord.token].data.erase(c.coord.char_index);
                 _lines[c.coord.line + 1].tokens.emplace_back(std::move(tok));
 
