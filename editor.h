@@ -82,8 +82,8 @@ namespace ImEdit {
 
     struct token {
         std::string data{};
-        unsigned short id{0}; // if two tokens have data, id, and type all set as equal by lexer, selecting one will highlight the other. id == 0: ignored (TODO)
         token_type::enum_ type{};
+        unsigned short id{0}; // if two tokens have data, id, and type all set as equal by lexer, selecting one will highlight the other. id == 0: ignored (TODO)
 
         bool operator==(const token& other) const noexcept {
             return id == other.id && type == other.type && data == other.data;
