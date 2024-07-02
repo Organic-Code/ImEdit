@@ -1022,12 +1022,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
     else {
     // Deleting a regular glyph
 
-        for (cursor& cursor : _cursors) {
-            if (cursor.coord.line == co.line && cursor.coord.token == co.token && cursor.coord.char_index >= co.char_index) {
-                cursor.coord = move_coordinates_left(cursor.coord);
-            }
-        }
-
+        const auto deleted_coord = co;
         if (co.char_index == 0) {
             assert(co.token > 0);
             --co.token;
@@ -1037,7 +1032,15 @@ void ImEdit::editor::delete_glyph(coordinates co) {
 
         auto& str = _lines[co.line].tokens[co.token].data;
         while (co.char_index-- > 0 &&  is_within_utf8(str[co.char_index]));
+        const auto char_count = char_count_for_utf8(str[co.char_index]);
         str.erase(co.char_index, char_count_for_utf8(str[co.char_index]));
+
+        for (cursor& cursor : _cursors) {
+            if (cursor.coord.line == deleted_coord.line && cursor.coord.token == deleted_coord.token
+                && cursor.coord.char_index >= deleted_coord.char_index) {
+                cursor.coord.char_index -= char_count;
+            }
+        }
 
         // Deleting token if empty
         if (_lines[co.line].tokens[co.token].data.empty()) {
