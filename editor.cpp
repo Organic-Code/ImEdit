@@ -134,6 +134,77 @@ namespace {
 
 }
 
+
+ImEdit::editor::iterator ImEdit::editor::iterator::operator++(int) noexcept {
+    auto copy = *this;
+    ++*this;
+    return copy;
+}
+
+ImEdit::editor::iterator &ImEdit::editor::iterator::operator++() noexcept {
+    assert((current.line + 1 < ed->_lines.size()
+            || current.token + 1 < ed->_lines.back().tokens.size()
+            || !ed->_lines.back().tokens.empty() && current.char_index < ed->_lines.back().tokens.back().data.size())
+            && "Trying to increment past .end()");
+    current = ed->move_coordinates_right(current);
+    return *this;
+}
+
+ImEdit::editor::iterator ImEdit::editor::iterator::operator--(int) noexcept {
+    auto copy = *this;
+    --*this;
+    return copy;
+}
+
+ImEdit::editor::iterator &ImEdit::editor::iterator::operator--() noexcept {
+    assert((current.line > 0 || current.token > 0 || current.char_index > 0) && "Trying to decrement before .begin()");
+    current = ed->move_coordinates_left(current);
+    return *this;
+}
+
+char ImEdit::editor::iterator::operator*() const noexcept {
+    assert(ed);
+
+    if (ed->_lines[current.line].tokens.empty()) {
+        return '\n';
+    }
+    auto& data = ed->_lines[current.line].tokens[current.token].data;
+    if (data.size() == current.char_index) {
+        if (current.token == ed->_lines[current.line].tokens.size() - 1) {
+            return '\n';
+        }
+        return ed->_lines[current.line].tokens[current.token + 1].data[0];
+    }
+    return data[current.char_index];
+}
+
+bool ImEdit::editor::iterator::operator==(const ImEdit::editor::iterator &other) const noexcept {
+    return ed == other.ed && ed->coordinates_eq(current, other.current);
+}
+
+bool ImEdit::editor::iterator::operator!=(const ImEdit::editor::iterator &other) const noexcept {
+    return !(*this == other);
+}
+
+ImEdit::editor::iterator ImEdit::editor::begin() noexcept {
+    return iterator{this, coordinates{0, 0, 0}};
+}
+
+ImEdit::editor::iterator ImEdit::editor::end() noexcept {
+    if (_lines.empty()) {
+        return begin();
+    }
+
+    if (_lines.back().tokens.empty()) {
+        return iterator{this, coordinates{static_cast<unsigned int>(_lines.size() - 1), 0, 0}};
+    }
+
+    return iterator{this, coordinates{static_cast<unsigned int>(_lines.size() - 1),
+                                      static_cast<unsigned int>(_lines.back().tokens.size() - 1),
+                                      static_cast<unsigned int>(_lines.back().tokens.back().data.size())}};
+}
+
+
 void ImEdit::editor::set_data(const std::string &data) {
     clear();
     std::istringstream iss(data);

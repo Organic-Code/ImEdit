@@ -55,6 +55,29 @@ namespace ImEdit {
          *
          */
     public:
+        // iterates over characters
+        struct iterator {
+            iterator(editor* e, coordinates c) noexcept : ed{e}, current{c} {}
+            iterator(const iterator& other) noexcept = default;
+            iterator& operator=(const iterator& other) noexcept = default;
+
+            iterator operator++(int) noexcept;
+            iterator& operator++() noexcept;
+            iterator operator--(int) noexcept;
+            iterator& operator--() noexcept;
+            char operator*() const noexcept;
+            bool operator==(const iterator& other) const noexcept;
+            bool operator!=(const iterator& other) const noexcept;
+
+            [[nodiscard]] coordinates get_coord() const noexcept { return current; }
+            [[nodiscard]] editor& editor() noexcept { return *ed; };
+
+        private:
+            class editor* ed;
+            coordinates current;
+        };
+
+
         explicit editor(std::string id); // id is passed down to imgui
 
         void render();
@@ -62,6 +85,11 @@ namespace ImEdit {
         /**
          * The following methods do not call _public_methods_callback
          */
+        // TODO specify when those are invalidated
+        // iterates over data, giving away char. Output only.
+        iterator begin() noexcept;
+        iterator end() noexcept;
+
         void set_data(const std::string& data);
         void set_data(std::deque<line> lines);
         [[nodiscard]] const std::deque<line>& get_data() const noexcept { return _lines; }
@@ -100,10 +128,10 @@ namespace ImEdit {
         static std::vector<std::pair<input, std::function<void(void*, editor&)>>> get_default_shortcuts();
         static style get_default_style(); // similar to monokai
 
+
         /**
          * All the following methods call _public_methods_callback
          */
-
         void add_selection(region r) noexcept;
         void delete_selections(); // delete the contents of every selection
 
