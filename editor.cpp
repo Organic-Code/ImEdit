@@ -198,7 +198,9 @@ void ImEdit::editor::render() {
     // space to the left for displaying line numbers, breakpoints, and such
     const auto extra_padding = compute_extra_padding();
     const auto region_avail = ImGui::GetContentRegionAvail();
-    const ImVec2 draw_region{std::max(_longest_line_px + extra_padding, _width ? *_width : 0),
+    const ImVec2 draw_region{_width ?
+                                    *_width != 0 ? std::max(_longest_line_px + extra_padding, *_width) : region_avail.x
+                                    : _longest_line_px + extra_padding,
                              _height ?
                                     *_height != 0 ? *_height : region_avail.y
                                     : std::min(ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size()), region_avail.y)};
@@ -289,7 +291,7 @@ void ImEdit::editor::render() {
         imgui_cursor.x += 5;
 
         if (line.background) {
-            draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x,
+            draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x - extra_padding,
                                                     imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
                                      *line.background);
         }
