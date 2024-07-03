@@ -744,15 +744,28 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_right_token(coordinates co)
 }
 
 ImEdit::coordinates ImEdit::editor::move_coordinates_endline(coordinates co) const noexcept { // NOLINT(*-convert-member-functions-to-static)
-    co.token = 0;
-    co.char_index = 0;
-    return co;
-}
-
-ImEdit::coordinates ImEdit::editor::move_coordinates_begline(coordinates co) const noexcept {
     if (!_lines[co.line].tokens.empty()) {
         co.token = _lines[co.line].tokens.size() - 1;
         co.char_index = _lines[co.line].tokens.back().data.size();
+    }
+    return co;
+}
+
+// Moves to first non-blank token if co wasn’t already there, and to actual beginning of line otherwise
+ImEdit::coordinates ImEdit::editor::move_coordinates_begline(coordinates co) const noexcept {
+    if (!_lines[co.line].tokens.empty()) {
+        const auto& tokens = _lines[co.line].tokens;
+        unsigned int first_non_blank_idx = 0;
+        for (;first_non_blank_idx < tokens.size() && tokens[first_non_blank_idx].type == token_type::blank ; ++first_non_blank_idx);
+
+        if (first_non_blank_idx != tokens.size() &&
+                (co.token > first_non_blank_idx || co.token == first_non_blank_idx && co.char_index > 0)) {
+            co.token = first_non_blank_idx;
+            co.char_index = 0;
+        } else {
+            co.token = 0;
+            co.char_index = 0;
+        }
     }
     return co;
 }
