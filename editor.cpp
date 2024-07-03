@@ -911,35 +911,42 @@ void ImEdit::editor::toggle_selection(ImEdit::region r) {
 
     // FIXME doesn’t actually work properly
     for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
-        if (coordinates_within_ex(r.beg, _selections[i]) || coordinates_within_ex(r.end, _selections[i])) {
-            if (coordinates_eq(_selections[i].end, r.end)) {
-                _selections[i].end = r.beg;
+        // selection with mouse grabbing does not ensure .beg < .end
+        auto r2 = sorted_region(_selections[i]);
+
+        if (coordinates_within_ex(r.beg, r2) || coordinates_within_ex(r.end, r2)) {
+            if (coordinates_eq(r2.end, r.end)) {
+                greater_coordinates_of(_selections[i]) = r.beg;
             }
-            else if (coordinates_eq(_selections[i].beg, r.beg)) {
-                _selections[i].beg = r.end;
+            else if (coordinates_eq(r2.beg, r.beg)) {
+                smaller_coordinates_of(_selections[i]) = r.end;
             }
             else {
-                if (coordinates_lt(r.beg, _selections[i].beg)) {
-                    _selections[i].beg = r.beg;
+                if (coordinates_lt(r.beg, r2.beg)) {
+                    smaller_coordinates_of(_selections[i]) = r.beg;
                 }
-                if (coordinates_lt(_selections[i].end, r.end)) {
-                    _selections[i].end = r.end;
+                if (coordinates_lt(r2.end, r.end)) {
+                    greater_coordinates_of(_selections[i]) = r.end;
                 }
             }
             return;
         }
-        else if (coordinates_eq(r.beg, _selections[i].beg)) {
-            if (coordinates_eq(r.end, _selections[i].end)) {
+        else if (coordinates_eq(r.beg, r2.beg)) {
+            if (coordinates_eq(r.end, r2.end)) {
                 _selections.erase(std::next(_selections.begin(), i));
                 return;
             }
             else {
-                _selections[i].beg = r.end;
+                smaller_coordinates_of(_selections[i]) = r.end;
                 return;
             }
         }
-        else if (coordinates_eq(r.end, _selections[i].end)) {
-            _selections[i].end = r.beg;
+        else if (coordinates_eq(r.end, r2.end)) {
+            greater_coordinates_of(_selections[i]) = r.beg;
+            return;
+        }
+        else if (coordinates_eq(r.end, r2.beg)) {
+            smaller_coordinates_of(_selections[i]) = r.beg;
             return;
         }
     }
@@ -1611,6 +1618,27 @@ bool ImEdit::editor::coordinates_within_ex(ImEdit::coordinates coord, ImEdit::re
     return coordinates_lt(r.beg, coord) && coordinates_lt(coord, r.end);
 }
 
+ImEdit::region ImEdit::editor::sorted_region(region r) const noexcept {
+    if (coordinates_lt(r.beg, r.end)) {
+        return r;
+    }
+    return {r.end, r.beg};
+}
+
+ImEdit::coordinates& ImEdit::editor::greater_coordinates_of(region& r) const noexcept {
+    if (coordinates_lt(r.beg, r.end)) {
+        return r.end;
+    }
+    return r.beg;
+}
+
+ImEdit::coordinates& ImEdit::editor::smaller_coordinates_of(region& r) const noexcept {
+    if (coordinates_lt(r.beg, r.end)) {
+        return r.beg;
+    }
+    return r.end;
+}
+
 void ImEdit::editor::delete_selections() {
     // TODO call lexer, also with previous data
 
@@ -1945,7 +1973,13 @@ void ImEdit::editor::set_data(std::deque<line> lines) {
 void ImEdit::editor::copy_to_clipboard() const {
     std::ostringstream oss;
     bool is_first_selection{true};
-    for (const region& select : _selections) {
+
+    std::vector<region> sorted_selections = _selections;
+    std::sort(sorted_selections.begin(), sorted_selections.end(), [this](const region& r1, const region& r2) {
+        return coordinates_lt(r1.beg, r2.beg);
+    });
+
+    for (const region& select : sorted_selections) {
         if (coordinates_eq(select.beg, select.end)) {
             continue;
         }

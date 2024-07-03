@@ -192,6 +192,10 @@ namespace ImEdit {
         [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
         [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
 
+        [[nodiscard]] region sorted_region(region) const noexcept;
+        [[nodiscard]] coordinates& greater_coordinates_of(region&) const noexcept;
+        [[nodiscard]] coordinates& smaller_coordinates_of(region&) const noexcept;
+
         // Deletes cursors that are at the same place to leave only on of them,
         // and merges selections that should be merged together (when using multiple cursors)
         void sanitize_cursors();
