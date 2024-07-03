@@ -909,7 +909,6 @@ void ImEdit::editor::toggle_selection(ImEdit::region r) {
     }
     assert(coordinates_lt(r.beg, r.end));
 
-    // FIXME doesn’t actually work properly
     for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
         // selection with mouse grabbing does not ensure .beg < .end
         auto r2 = sorted_region(_selections[i]);
@@ -1172,9 +1171,6 @@ void ImEdit::editor::remove_cursor(coordinates coords) {
             _cursors.emplace_back();
         }
     }
-
-    // FIXME remove selection linked to this cursor, if any
-
 }
 
 bool ImEdit::editor::has_cursor(ImEdit::coordinates coords) {
@@ -1856,7 +1852,6 @@ void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
             c2.coord.char_index++; // just inserted a char before that cursor
         }
     }
-    pos.coord.char_index++; // inserted a char at this index
 }
 
 void ImEdit::editor::input_newline() {
