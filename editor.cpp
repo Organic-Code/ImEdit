@@ -1792,7 +1792,7 @@ void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
     _lines[pos.coord.line].tokens[pos.coord.token].data.insert(pos.coord.char_index, 1, ch);
 
     for (cursor& c2 : _cursors) {
-        if (pos.coord.line == c2.coord.line && pos.coord.token == c2.coord.token && pos.coord.char_index < c2.coord.char_index) {
+        if (pos.coord.line == c2.coord.line && pos.coord.token == c2.coord.token && pos.coord.char_index <= c2.coord.char_index) {
             c2.coord.char_index++; // just inserted a char before that cursor
         }
     }
