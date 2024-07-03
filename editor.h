@@ -58,22 +58,58 @@ namespace ImEdit {
         explicit editor(std::string id); // id is passed down to imgui
 
         void render();
+
+        /**
+         * The following methods do not call _public_methods_callback
+         */
         void set_data(const std::string& data);
         void set_data(std::deque<line> lines);
         [[nodiscard]] const std::deque<line>& get_data() const noexcept { return _lines; }
 
-        void add_selection(region r) noexcept;
         [[nodiscard]] const std::vector<region>& get_selections() const noexcept { return _selections; }
-        void delete_selections();
+
+        // checks if there is a cursor at coords
+        bool has_cursor(coordinates coords);
+        void add_cursor(coordinates coords);
+        void remove_cursor(coordinates coords);
+
+        // returns the coordinates of the mouse in editor coordinates
+        coordinates mouse_position();
+
+        // Call these if you want ImEdit to scroll up or down the next time it is rendered
+        void scroll_up_next_frame() noexcept { _scroll_up_next_frame = true; } // default ctrl+up
+        void scroll_down_next_frame() noexcept { _scroll_down_next_frame = true; } // default ctrl+down
+
+        // clears all data (keeps shortcuts)
+        void clear();
+
+        // editor._shortcuts_data can be set, and will be passed as parameter to this callback
+        void add_shortcut(input in, std::function<void(void* shortcuts_data, editor& this_editor)> callback);
+        void add_shortcut(input in, void(editor::*member_function)());
+        void add_shortcut(input in, void(editor::*const_member_function)() const);
+        void clear_shortcuts() { _shortcuts.clear(); }
+
+        void delete_glyph(coordinates); // deletes the glyph at the given coordinates, ie just before a cursor that would have those coordinates
+
+        void font_changed() const noexcept; // Call this whenever the font is modified
+
+        // hides tooltip, if one is currently being shown
+        void reset_current_tooltip();
+
+
+        static std::vector<std::pair<input, std::function<void(void*, editor&)>>> get_default_shortcuts();
+        static style get_default_style(); // similar to monokai
+
+        /**
+         * All the following methods call _public_methods_callback
+         */
+
+        void add_selection(region r) noexcept;
+        void delete_selections(); // delete the contents of every selection
 
         void copy_to_clipboard() const;
         void paste_from_clipboard();
         void cut_to_clipboard();
-
-        void add_cursor(coordinates coords);
-        void remove_cursor(coordinates coords);
-        bool has_cursor(coordinates coords);
-        coordinates mouse_position();
 
         void move_cursors_up();
         void move_cursors_down();
@@ -105,28 +141,8 @@ namespace ImEdit {
         void input_delete(); // deletes the char after each cursor
         void input_backspace(); // deletes the char before each cursor
 
-        // Call these if you want ImEdit to scroll up or down the next time it is rendered
-        void scroll_up_next_frame() noexcept { _scroll_up_next_frame = true; }
-        void scroll_down_next_frame() noexcept { _scroll_down_next_frame = true; }
-
-        void clear();
-
-        void delete_glyph(coordinates); // deletes the glyph at the given coordinates, ie just before a cursor that would have those coordinates
-
-        void font_changed() const noexcept; // Call this whenever the font is modified
-
-        void reset_current_tooltip();
-
-        // _shortcuts_data can be set and will be passed as parameter to this callback
-        void add_shortcut(input in, std::function<void(void* shortcuts_data, editor& this_editor)> callback);
-        void add_shortcut(input in, void(editor::*member_function)());
-        void add_shortcut(input in, void(editor::*member_function)() const);
-        void clear_shortcuts() { _shortcuts.clear(); }
 
 
-
-        static std::vector<std::pair<input, std::function<void(void*, editor&)>>> get_default_shortcuts();
-        static style get_default_style(); // similar to monokai
 
         bool _allow_keyboard_input{true}; // set to false to inhibit keyboard management
         bool _allow_mouse_input{true}; // set to false to inhibit mouse management
@@ -156,9 +172,8 @@ namespace ImEdit {
 
         void* _shortcuts_data{nullptr}; // Passed to shortcut callbacks as user data
 
-
-
-
+        std::function<void(void* data, std::function<void()>)> _public_methods_callback{}; // TODO explain this. Mention editor::_allow_mouse_input
+        void* _public_methods_callback_data{nullptr};
 
 
     /*************************************************************************************
@@ -244,6 +259,8 @@ namespace ImEdit {
 
         bool _scroll_up_next_frame{false};
         bool _scroll_down_next_frame{false};
+
+        mutable bool _should_call_pmc{true}; // if public function call and this is true, set to false, call _public_methods_callback, and re-set to true before function exit
     };
 }
 

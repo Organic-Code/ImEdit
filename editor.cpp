@@ -31,6 +31,15 @@
 #include <sstream>
 #include "editor.h"
 
+#define IMEDIT_CALL_PMC(x)                                                             \
+        bool called_pmc = false;                                                       \
+        if (_should_call_pmc && _public_methods_callback) {                            \
+            called_pmc = true;                                                         \
+            _should_call_pmc = false;                                                  \
+            _public_methods_callback(_public_methods_callback_data, [this](){ x(); }); \
+        }
+#define IMEDIT_RESTORE_PMC if (called_pmc) { _should_call_pmc = true; }
+
 namespace {
     ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs) {
         return {lhs.x + rhs.x, lhs.y + rhs.y};
@@ -523,36 +532,52 @@ ImEdit::editor::editor(std::string id) :
 }
 
 void ImEdit::editor::move_cursors_up() {
+    IMEDIT_CALL_PMC(move_cursors_up)
+
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_up(cursor.coord, cursor.wanted_column);
     }
     _selections.clear();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 
 void ImEdit::editor::move_cursors_down() {
+    IMEDIT_CALL_PMC(move_cursors_down)
+
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_down(cursor.coord, cursor.wanted_column);
     }
     _selections.clear();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 void ImEdit::editor::move_cursors_left() {
+    IMEDIT_CALL_PMC(move_cursors_left)
+
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_left(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
     _selections.clear();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 void ImEdit::editor::move_cursors_right() {
+    IMEDIT_CALL_PMC(move_cursors_right)
+
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_right(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
     _selections.clear();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 
@@ -580,16 +605,22 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_down(coordinates coord, uns
 }
 
 void ImEdit::editor::move_cursors_left_token() {
+    IMEDIT_CALL_PMC(move_cursors_left_token)
+
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_left_token(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
     _selections.clear();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 
 void ImEdit::editor::move_cursors_right_token() {
+    IMEDIT_CALL_PMC(move_cursors_right_token)
+
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_right_token(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
@@ -597,27 +628,38 @@ void ImEdit::editor::move_cursors_right_token() {
     _selections.clear();
     sanitize_cursors();
 
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::move_cursors_to_beg() {
+    IMEDIT_CALL_PMC(move_cursors_to_beg)
+
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_begline(cursor.coord);
         cursor.wanted_column = 0;
     }
     _selections.clear();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::move_cursors_to_end() {
+    IMEDIT_CALL_PMC(move_cursors_to_end)
+
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_endline(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
     }
     _selections.clear();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::move_cursors_to_endfile() {
+    IMEDIT_CALL_PMC(move_cursors_to_endfile)
+
     _cursors.clear();
     _selections.clear();
     cursor c;
@@ -633,12 +675,18 @@ void ImEdit::editor::move_cursors_to_endfile() {
         }
     }
     _cursors.emplace_back(c);
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::move_cursors_to_begfile() {
+    IMEDIT_CALL_PMC(move_cursors_to_begfile)
+
     _cursors.clear();
     _selections.clear();
     _cursors.emplace_back();
+
+    IMEDIT_RESTORE_PMC
 }
 
 
@@ -771,6 +819,8 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_begline(coordinates co) con
 }
 
 void ImEdit::editor::selection_toggle_right() {
+    IMEDIT_CALL_PMC(selection_toggle_right)
+
     for (cursor& c : _cursors) {
         auto begin = c.coord;
         auto end = move_coordinates_right(c.coord);
@@ -780,9 +830,13 @@ void ImEdit::editor::selection_toggle_right() {
     }
     sanitize_selections();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_toggle_left() {
+    IMEDIT_CALL_PMC(selection_toggle_left)
+
     for (cursor& c : _cursors) {
         auto begin = move_coordinates_left(c.coord);
         auto end = c.coord;
@@ -792,9 +846,13 @@ void ImEdit::editor::selection_toggle_left() {
     }
     sanitize_selections();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_toggle_right_token() {
+    IMEDIT_CALL_PMC(selection_toggle_right_token)
+
     for (cursor& c : _cursors) {
         auto begin = c.coord;
         auto end = move_coordinates_right_token(c.coord);
@@ -804,9 +862,13 @@ void ImEdit::editor::selection_toggle_right_token() {
     }
     sanitize_selections();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_toggle_left_token() {
+    IMEDIT_CALL_PMC(selection_toggle_left_token)
+
     for (cursor& c : _cursors) {
         auto begin = move_coordinates_left_token(c.coord);
         auto end = c.coord;
@@ -816,9 +878,13 @@ void ImEdit::editor::selection_toggle_left_token() {
     }
     sanitize_selections();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_toggle_up() {
+    IMEDIT_CALL_PMC(selection_toggle_up)
+
     for (cursor& c : _cursors) {
         auto begin = move_coordinates_up(c.coord, c.wanted_column);
         auto end = c.coord;
@@ -827,9 +893,13 @@ void ImEdit::editor::selection_toggle_up() {
     }
     sanitize_selections();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_toggle_down() {
+    IMEDIT_CALL_PMC(selection_toggle_down)
+
     for (cursor& c : _cursors) {
         auto begin = c.coord;
         auto end = move_coordinates_down(c.coord, c.wanted_column);
@@ -838,9 +908,13 @@ void ImEdit::editor::selection_toggle_down() {
     }
     sanitize_selections();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_begline() {
+    IMEDIT_CALL_PMC(selection_begline)
+
     for (cursor& c : _cursors) {
         auto begin = move_coordinates_begline(c.coord);
         auto end = c.coord;
@@ -850,9 +924,13 @@ void ImEdit::editor::selection_begline() {
     }
     sanitize_selections();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_endline() {
+    IMEDIT_CALL_PMC(selection_endline)
+
     for (cursor& c : _cursors) {
         auto begin = c.coord;
         auto end = move_coordinates_endline(c.coord);
@@ -862,9 +940,13 @@ void ImEdit::editor::selection_endline() {
     }
     sanitize_selections();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_begfile() {
+    IMEDIT_CALL_PMC(selection_begfile)
+
     coordinates max = {0,0,0};
     for (const cursor& c : _cursors) {
         if (coordinates_lt(max, c.coord)) {
@@ -875,9 +957,13 @@ void ImEdit::editor::selection_begfile() {
     _cursors.emplace_back();
     _selections.clear();
     _selections.push_back({{0,0,0}, max});
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::selection_endfile() {
+    IMEDIT_CALL_PMC(selection_endfile)
+
     coordinates end_coord;
     if (!_lines.empty()) {
         if (_lines.back().tokens.empty()) {
@@ -889,6 +975,7 @@ void ImEdit::editor::selection_endfile() {
                     static_cast<unsigned int>(_lines.back().tokens.back().data.size())};
         }
     } else {
+        IMEDIT_RESTORE_PMC
         return; // nothing to select
     }
     auto min = end_coord;
@@ -901,6 +988,8 @@ void ImEdit::editor::selection_endfile() {
     _cursors.push_back({end_coord, column_count_to(end_coord)});
     _selections.clear();
     _selections.push_back({min, end_coord});
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::toggle_selection(ImEdit::region r) {
@@ -1167,6 +1256,7 @@ void ImEdit::editor::remove_cursor(coordinates coords) {
 
     if (cursor_it != _cursors.end()) {
         _cursors.erase(cursor_it);
+        sanitize_selections();
         if (_cursors.empty()) {
             _cursors.emplace_back();
         }
@@ -1610,11 +1700,22 @@ ImVec2 ImEdit::editor::glyph_size() const noexcept {
 }
 
 void ImEdit::editor::add_selection(region r) noexcept {
+    bool called_pmc = false;
+    if (_should_call_pmc && _public_methods_callback) {
+        called_pmc = true;
+        _should_call_pmc = false;
+        _public_methods_callback(_public_methods_callback_data, [this, r](){ add_selection(r); });
+    }
+
     _cursors.push_back({r.end, column_count_to(r.end)});
     if (coordinates_lt(r.end, r.beg)) {
         std::swap(r.beg, r.end);
     }
     _selections.emplace_back(r);
+
+    if (called_pmc) {
+        _should_call_pmc = true;
+    }
 }
 
 ImVec2 ImEdit::editor::calc_text_size(const char *text, const char *text_end) noexcept {
@@ -1658,6 +1759,8 @@ ImEdit::coordinates& ImEdit::editor::smaller_coordinates_of(region& r) const noe
 }
 
 void ImEdit::editor::delete_selections() {
+    IMEDIT_CALL_PMC(delete_selections)
+
     // TODO call lexer, also with previous data
 
     // Deleting last selection first so that we don’t have to move a bunch of coordinates.
@@ -1781,9 +1884,19 @@ void ImEdit::editor::delete_selections() {
     }
     _selections.clear();
     sanitize_cursors();
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::input_char_utf16(ImWchar ch) {
+    bool called_pmc = false;
+    if (_should_call_pmc && _public_methods_callback) {
+        called_pmc = true;
+        _should_call_pmc = false;
+        _public_methods_callback(_public_methods_callback_data, [this, ch](){ input_char_utf16(ch); });
+    }
+
+
     for (cursor& c : _cursors) {
         if (_lines[c.coord.line].tokens.empty()) {
             _lines[c.coord.line].tokens.push_back({"", token_type::unknown});
@@ -1831,13 +1944,25 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
         }
         c.coord.char_index += advance;
     }
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::input_raw_char(char ch) {
+    bool called_pmc = false;
+    if (_should_call_pmc && _public_methods_callback) {
+        called_pmc = true;
+        _should_call_pmc = false;
+        _public_methods_callback(_public_methods_callback_data, [this, ch](){ input_raw_char(ch); });
+    }
+
+
     assert(ch != '\n' && "Call input_newline() instead");
     for (cursor& c : _cursors) {
         input_raw_char(ch, c);
     }
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
@@ -1855,6 +1980,8 @@ void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
 }
 
 void ImEdit::editor::input_newline() {
+    IMEDIT_CALL_PMC(input_newline)
+
     // TODO : call lexer, also with previous data
     delete_selections();
     for (cursor& c : _cursors) {
@@ -1890,9 +2017,13 @@ void ImEdit::editor::input_newline() {
         ++c.coord.line;
         c.coord.char_index = c.coord.token = c.wanted_column = 0;
     }
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::input_newline_nomove() {
+    IMEDIT_CALL_PMC(input_newline)
+
     for (cursor& c : _cursors) {
         _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
         for (cursor& c2 : _cursors) {
@@ -1901,9 +2032,13 @@ void ImEdit::editor::input_newline_nomove() {
             }
         }
     }
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::input_delete() {
+    IMEDIT_CALL_PMC(input_delete)
+
     if (!_selections.empty()) {
         delete_selections();
     } else {
@@ -1916,9 +2051,13 @@ void ImEdit::editor::input_delete() {
             }
         }
     }
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::input_backspace() {
+    IMEDIT_CALL_PMC(input_backspace)
+
     if (!_selections.empty()) {
         delete_selections();
     } else {
@@ -1926,6 +2065,8 @@ void ImEdit::editor::input_backspace() {
             delete_glyph(cursor.coord);
         }
     }
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::show_tooltip() {
@@ -1985,6 +2126,8 @@ void ImEdit::editor::set_data(std::deque<line> lines) {
 }
 
 void ImEdit::editor::copy_to_clipboard() const {
+    IMEDIT_CALL_PMC(copy_to_clipboard)
+
     std::ostringstream oss;
     bool is_first_selection{true};
 
@@ -2051,9 +2194,13 @@ void ImEdit::editor::copy_to_clipboard() const {
     }
 
     ImGui::SetClipboardText(oss.str().c_str());
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::paste_from_clipboard() {
+    IMEDIT_CALL_PMC(paste_from_clipboard)
+
     delete_selections();
     std::string str = ImGui::GetClipboardText();
 
@@ -2095,11 +2242,15 @@ void ImEdit::editor::paste_from_clipboard() {
         }
     }
     _longest_line_px = 0;
+
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::cut_to_clipboard() {
+    IMEDIT_CALL_PMC(cut_to_clipboard)
     copy_to_clipboard();
     delete_selections();
+    IMEDIT_RESTORE_PMC
 }
 
 void ImEdit::editor::add_shortcut(input in, std::function<void(void *, editor &)> callback) {
