@@ -525,7 +525,7 @@ void ImEdit::editor::move_cursors_up() {
         cursor.coord = move_coordinates_up(cursor.coord, cursor.wanted_column);
     }
     _selections.clear();
-    manage_extra_cursors();
+    sanitize_cursors();
 }
 
 
@@ -534,7 +534,7 @@ void ImEdit::editor::move_cursors_down() {
         cursor.coord = move_coordinates_down(cursor.coord, cursor.wanted_column);
     }
     _selections.clear();
-    manage_extra_cursors();
+    sanitize_cursors();
 }
 void ImEdit::editor::move_cursors_left() {
     for (auto& cursor : _cursors) {
@@ -542,7 +542,7 @@ void ImEdit::editor::move_cursors_left() {
         cursor.wanted_column = column_count_to(cursor.coord);
     }
     _selections.clear();
-    manage_extra_cursors();
+    sanitize_cursors();
 }
 void ImEdit::editor::move_cursors_right() {
     for (auto& cursor : _cursors) {
@@ -550,7 +550,7 @@ void ImEdit::editor::move_cursors_right() {
         cursor.wanted_column = column_count_to(cursor.coord);
     }
     _selections.clear();
-    manage_extra_cursors();
+    sanitize_cursors();
 }
 
 
@@ -576,6 +576,69 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_down(coordinates coord, uns
     coord = coordinates_for(wanted_column, coord.line + 1);
     return coord;
 }
+
+void ImEdit::editor::move_cursors_left_token() {
+    for (auto& cursor : _cursors) {
+        cursor.coord = move_coordinates_left_token(cursor.coord);
+        cursor.wanted_column = column_count_to(cursor.coord);
+    }
+    _selections.clear();
+    sanitize_cursors();
+}
+
+
+void ImEdit::editor::move_cursors_right_token() {
+    for (auto& cursor : _cursors) {
+        cursor.coord = move_coordinates_right_token(cursor.coord);
+        cursor.wanted_column = column_count_to(cursor.coord);
+    }
+    _selections.clear();
+    sanitize_cursors();
+
+}
+
+void ImEdit::editor::move_cursors_to_beg() {
+    for (auto& cursor : _cursors) {
+        cursor.coord = move_coordinates_begline(cursor.coord);
+        cursor.wanted_column = 0;
+    }
+    _selections.clear();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::move_cursors_to_end() {
+    for (auto& cursor : _cursors) {
+        cursor.coord = move_coordinates_endline(cursor.coord);
+        cursor.wanted_column = column_count_to(cursor.coord);
+    }
+    _selections.clear();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::move_cursors_to_endfile() {
+    _cursors.clear();
+    _selections.clear();
+    cursor c;
+    if (!_lines.empty()) {
+        if (_lines.back().tokens.empty()) {
+            c.coord = {static_cast<unsigned int>(_lines.size() - 1), 0, 0};
+        } else {
+            c.coord = {
+                    static_cast<unsigned int>(_lines.size() - 1),
+                    static_cast<unsigned int>(_lines.back().tokens.size() - 1),
+                    static_cast<unsigned int>(_lines.back().tokens.back().data.size())};
+            c.wanted_column = column_count_to(c.coord);
+        }
+    }
+    _cursors.emplace_back(c);
+}
+
+void ImEdit::editor::move_cursors_to_begfile() {
+    _cursors.clear();
+    _selections.clear();
+    _cursors.emplace_back();
+}
+
 
 ImEdit::coordinates ImEdit::editor::move_coordinates_left(coordinates coord) const noexcept {
     if (coord.char_index > 0) {
@@ -645,71 +708,230 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_right(coordinates coord) co
     return coord;
 }
 
-void ImEdit::editor::move_cursors_to_end() {
-    for (auto& cursor : _cursors) {
-        if (!_lines[cursor.coord.line].tokens.empty()) {
-            cursor.coord.token = _lines[cursor.coord.line].tokens.size() - 1;
-            cursor.coord.char_index = _lines[cursor.coord.line].tokens.back().data.size();
-            cursor.wanted_column = column_count_to(cursor.coord);
-        }
+ImEdit::coordinates ImEdit::editor::move_coordinates_left_token(coordinates co) const noexcept {
+    if (co.char_index > 0) {
+        co.char_index = 0;
     }
-    _selections.clear();
-    manage_extra_cursors();
+    else if (co.token > 0) {
+        --co.token;
+        // cursor.coord.char_index == 0
+    }
+    else {
+        co = move_coordinates_left(co); // just one left: previous line
+    }
+
+    return co;
 }
 
-void ImEdit::editor::move_cursors_to_beg() {
-    for (auto& cursor : _cursors) {
-        cursor.coord.token = 0;
-        cursor.coord.char_index = 0;
-        cursor.wanted_column = 0;
+ImEdit::coordinates ImEdit::editor::move_coordinates_right_token(coordinates co) const noexcept {
+    if (_lines[co.line].tokens.empty()) { // NOLINT(*-branch-clone)
+        co = move_coordinates_right(co);
     }
-    _selections.clear();
-    manage_extra_cursors();
+    else if (auto char_count = _lines[co.line].tokens[co.token].data.size() ; co.char_index < char_count) {
+        co.char_index = char_count;
+    }
+    else if (co.token + 1 < _lines[co.line].tokens.size()) {
+        ++co.token;
+        co.char_index = _lines[co.line].tokens[co.token].data.size();
+    }
+    else {
+        co = move_coordinates_right(co); // just one right: next line
+    }
+
+    return co;
 }
 
-void ImEdit::editor::move_cursors_left_token() {
-    for (auto& cursor : _cursors) {
-        if (cursor.coord.char_index > 0) {
-            cursor.coord.char_index = 0;
-        }
-        else if (cursor.coord.token > 0) {
-            --cursor.coord.token;
-            // cursor.coord.char_index == 0
-        }
-        else {
-            cursor.coord = move_coordinates_left(cursor.coord); // just one left: previous line
-        }
-
-        cursor.wanted_column = column_count_to(cursor.coord);
-    }
-    _selections.clear();
-    manage_extra_cursors();
+ImEdit::coordinates ImEdit::editor::move_coordinates_endline(coordinates co) const noexcept { // NOLINT(*-convert-member-functions-to-static)
+    co.token = 0;
+    co.char_index = 0;
+    return co;
 }
 
-
-void ImEdit::editor::move_cursors_right_token() {
-    for (auto& cursor : _cursors) {
-        if (_lines[cursor.coord.line].tokens.empty()) { // NOLINT(*-branch-clone)
-            cursor.coord = move_coordinates_right(cursor.coord);
-        }
-        else if (auto char_count = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size() ; cursor.coord.char_index < char_count) {
-            cursor.coord.char_index = char_count;
-        }
-        else if (cursor.coord.token + 1 < _lines[cursor.coord.line].tokens.size()) {
-            ++cursor.coord.token;
-            cursor.coord.char_index = _lines[cursor.coord.line].tokens[cursor.coord.token].data.size();
-        }
-        else {
-            cursor.coord = move_coordinates_right(cursor.coord); // just one right: next line
-        }
-
-        cursor.wanted_column = column_count_to(cursor.coord);
+ImEdit::coordinates ImEdit::editor::move_coordinates_begline(coordinates co) const noexcept {
+    if (!_lines[co.line].tokens.empty()) {
+        co.token = _lines[co.line].tokens.size() - 1;
+        co.char_index = _lines[co.line].tokens.back().data.size();
     }
-    _selections.clear();
-    manage_extra_cursors();
-
+    return co;
 }
 
+void ImEdit::editor::selection_toggle_right() {
+    for (cursor& c : _cursors) {
+        auto begin = c.coord;
+        auto end = move_coordinates_right(c.coord);
+        c.coord = end;
+        c.wanted_column = column_count_to(c.coord);
+        toggle_selection({begin, end});
+    }
+    sanitize_selections();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::selection_toggle_left() {
+    for (cursor& c : _cursors) {
+        auto begin = move_coordinates_left(c.coord);
+        auto end = c.coord;
+        c.coord = begin;
+        c.wanted_column = column_count_to(c.coord);
+        toggle_selection({begin, end});
+    }
+    sanitize_selections();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::selection_toggle_right_token() {
+    for (cursor& c : _cursors) {
+        auto begin = c.coord;
+        auto end = move_coordinates_right_token(c.coord);
+        c.coord = end;
+        c.wanted_column = column_count_to(c.coord);
+        toggle_selection({begin, end});
+    }
+    sanitize_selections();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::selection_toggle_left_token() {
+    for (cursor& c : _cursors) {
+        auto begin = move_coordinates_left_token(c.coord);
+        auto end = c.coord;
+        c.coord = begin;
+        c.wanted_column = column_count_to(c.coord);
+        toggle_selection({begin, end});
+    }
+    sanitize_selections();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::selection_toggle_up() {
+    for (cursor& c : _cursors) {
+        auto begin = move_coordinates_up(c.coord, c.wanted_column);
+        auto end = c.coord;
+        c.coord = begin;
+        toggle_selection({begin, end});
+    }
+    sanitize_selections();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::selection_toggle_down() {
+    for (cursor& c : _cursors) {
+        auto begin = c.coord;
+        auto end = move_coordinates_down(c.coord, c.wanted_column);
+        c.coord = end;
+        toggle_selection({begin, end});
+    }
+    sanitize_selections();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::selection_begline() {
+    for (cursor& c : _cursors) {
+        auto begin = move_coordinates_begline(c.coord);
+        auto end = c.coord;
+        c.coord = begin;
+        c.wanted_column = 0;
+        toggle_selection({begin, end});
+    }
+    sanitize_selections();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::selection_endline() {
+    for (cursor& c : _cursors) {
+        auto begin = c.coord;
+        auto end = move_coordinates_endline(c.coord);
+        c.coord = end;
+        c.wanted_column = column_count_to(c.coord);
+        toggle_selection({begin, end});
+    }
+    sanitize_selections();
+    sanitize_cursors();
+}
+
+void ImEdit::editor::selection_begfile() {
+    coordinates max = {0,0,0};
+    for (const cursor& c : _cursors) {
+        if (coordinates_lt(max, c.coord)) {
+            max = c.coord;
+        }
+    }
+    _cursors.clear();
+    _cursors.emplace_back();
+    _selections.clear();
+    _selections.push_back({{0,0,0}, max});
+}
+
+void ImEdit::editor::selection_endfile() {
+    coordinates end_coord;
+    if (!_lines.empty()) {
+        if (_lines.back().tokens.empty()) {
+            end_coord = {static_cast<unsigned int>(_lines.size() - 1), 0, 0};
+        } else {
+            end_coord = {
+                    static_cast<unsigned int>(_lines.size() - 1),
+                    static_cast<unsigned int>(_lines.back().tokens.size() - 1),
+                    static_cast<unsigned int>(_lines.back().tokens.back().data.size())};
+        }
+    } else {
+        return; // nothing to select
+    }
+    auto min = end_coord;
+    for (const cursor& c : _cursors) {
+        if (coordinates_lt(c.coord, min)) {
+            min = c.coord;
+        }
+    }
+    _cursors.clear();
+    _cursors.push_back({end_coord, column_count_to(end_coord)});
+    _selections.clear();
+    _selections.push_back({min, end_coord});
+}
+
+void ImEdit::editor::toggle_selection(ImEdit::region r) {
+    if (coordinates_eq(r.beg, r.end)) {
+        return;
+    }
+    assert(coordinates_lt(r.beg, r.end));
+
+    // FIXME doesn’t actually work properly
+    for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
+        if (coordinates_within_ex(r.beg, _selections[i]) || coordinates_within_ex(r.end, _selections[i])) {
+            if (coordinates_eq(_selections[i].end, r.end)) {
+                _selections[i].end = r.beg;
+            }
+            else if (coordinates_eq(_selections[i].beg, r.beg)) {
+                _selections[i].beg = r.end;
+            }
+            else {
+                if (coordinates_lt(r.beg, _selections[i].beg)) {
+                    _selections[i].beg = r.beg;
+                }
+                if (coordinates_lt(_selections[i].end, r.end)) {
+                    _selections[i].end = r.end;
+                }
+            }
+            return;
+        }
+        else if (coordinates_eq(r.beg, _selections[i].beg)) {
+            if (coordinates_eq(r.end, _selections[i].end)) {
+                _selections.erase(std::next(_selections.begin(), i));
+                return;
+            }
+            else {
+                _selections[i].beg = r.end;
+                return;
+            }
+        }
+        else if (coordinates_eq(r.end, _selections[i].end)) {
+            _selections[i].end = r.beg;
+            return;
+        }
+    }
+
+    // no matching selection : create a new one
+    _selections.push_back(r);
+}
 
 unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const noexcept {
     if (coord.token == 0 && coord.char_index == 0) {
@@ -788,10 +1010,7 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
     return coord;
 }
 
-void ImEdit::editor::manage_extra_cursors() {
-
-    merge_selections();
-
+void ImEdit::editor::sanitize_cursors() {
     // Delete duplicate cursors
     bool delete_performed;
     do {
@@ -826,7 +1045,7 @@ void ImEdit::editor::manage_extra_cursors() {
         auto to_erase = _cursors.end();
         for (auto it = _cursors.begin() ; it != _cursors.end() && to_erase == _cursors.end() ; ++it) {
             for (const auto& select : _selections) {
-                if (coordinates_within(it->coord, select)) {
+                if (coordinates_within_ex(it->coord, select)) {
                     to_erase = it;
                 }
             }
@@ -838,6 +1057,7 @@ void ImEdit::editor::manage_extra_cursors() {
         }
 
     } while (delete_performed);
+    assert(!_cursors.empty());
 }
 
 void ImEdit::editor::clear_cursors_within_selections() {
@@ -856,14 +1076,15 @@ void ImEdit::editor::clear_cursors_within_selections() {
     }
 }
 
-void ImEdit::editor::merge_selections() {
+void ImEdit::editor::sanitize_selections() {
     // Merging selections first.
+    // TODO: Test me (all branches)
     bool perform_merge;
     do {
         perform_merge = false;
 
-        unsigned int a = _selections.size();
-        unsigned int b = a;
+        unsigned int first = _selections.size();
+        unsigned int second = first;
         for (unsigned int i = 0; i < _selections.size() && !perform_merge; ++i) {
             for (unsigned int j = 0; j < _selections.size(); ++j) {
                 if (i == j) {
@@ -872,21 +1093,25 @@ void ImEdit::editor::merge_selections() {
 
                 if (coordinates_eq(_selections[j].beg, _selections[i].end)) {
                     perform_merge = true; // merge to be performed;
-                    a = i;
-                    b = j;
+                    first = i;
+                    second = j;
                     break;
                 }
             }
         }
 
         if (perform_merge) {
-            if (coordinates_lt_eq(_selections[a].end, _selections[b].end)) {
-                _selections[a].end = _selections[b].end;
+            if (coordinates_lt_eq(_selections[first].end, _selections[second].end)) {
+                _selections[first].end = _selections[second].end;
+            } else {
+                _selections[second].end = _selections[first].end;
             }
-            _selections.erase(std::next(_selections.begin(), b));
+            _selections.erase(std::next(_selections.begin(), second));
         }
 
     } while (perform_merge);
+
+    // TODO delete empty selections and selections that have no associated cursor.
 }
 
 void ImEdit::editor::add_cursor(coordinates coords) {
@@ -895,7 +1120,7 @@ void ImEdit::editor::add_cursor(coordinates coords) {
     assert(coords.char_index <= _lines[coords.line].tokens[coords.token].data.size());
 
     _cursors.push_back({coords, column_count_to(coords)});
-    manage_extra_cursors();
+    sanitize_cursors();
 }
 
 void ImEdit::editor::remove_cursor(coordinates coords) {
@@ -913,6 +1138,8 @@ void ImEdit::editor::remove_cursor(coordinates coords) {
             _cursors.emplace_back();
         }
     }
+
+    // FIXME remove selection linked to this cursor, if any
 
 }
 
@@ -950,7 +1177,7 @@ void ImEdit::editor::find_longest_line() {
     _longest_line_px = 0;
     auto space_size = glyph_size().x;
     for (unsigned int i = 0 ; i < _lines.size() ; ++i) {
-        float length = calc_line_size(i, space_size);
+        float length = calc_line_size(i);
         if (length > _longest_line_px) {
             _longest_line_px = length;
             _longest_line_idx = i;
@@ -958,10 +1185,12 @@ void ImEdit::editor::find_longest_line() {
     }
 }
 
-float ImEdit::editor::calc_line_size(unsigned int line, float space_size) const noexcept {
+float ImEdit::editor::calc_line_size(unsigned int line) const noexcept {
     if (_lines[line].tokens.empty()) {
         return 0;
     }
+
+    auto space_size = glyph_size().x;
 
     coordinates c;
     c.line = line;
@@ -1132,7 +1361,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         }
     }
 
-    manage_extra_cursors();
+    sanitize_cursors();
 
 }
 
@@ -1204,7 +1433,7 @@ void ImEdit::editor::handle_mouse_input() {
             _selections.push_back({sel_beg, sel_end});
             _cursors.emplace_back(cursor);
         }
-        merge_selections();
+        sanitize_selections();
         clear_cursors_within_selections();
     }
     else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -1222,6 +1451,7 @@ void ImEdit::editor::handle_mouse_input() {
                 _cursors.push_back({coord, column_count_to(coord)});
             } else if (_cursors.size() > 1) { // don’t erase last cursor
                 _cursors.erase(it);
+                sanitize_selections();
             }
         }
     }
@@ -1492,7 +1722,7 @@ void ImEdit::editor::delete_selections() {
         }
     }
     _selections.clear();
-    manage_extra_cursors();
+    sanitize_cursors();
 }
 
 void ImEdit::editor::input_char_utf16(ImWchar ch) {
@@ -1847,6 +2077,7 @@ std::vector<std::pair<ImEdit::input, std::function<void(void *, ImEdit::editor &
     shortcuts.emplace_back(input{{ImGuiKey_Tab}, input::modifiers::none}, [](void*, editor& ed) {
         ed.input_char_utf16('\t');
     });
+
     add_memb_fn({{ImGuiKey_Enter}, input::modifiers::control}, &editor::input_newline_nomove);
     add_memb_fn({{ImGuiKey_DownArrow}, input::modifiers::control}, &editor::scroll_down_next_frame);
     add_memb_fn({{ImGuiKey_UpArrow}, input::modifiers::control}, &editor::scroll_up_next_frame);
@@ -1855,6 +2086,22 @@ std::vector<std::pair<ImEdit::input, std::function<void(void *, ImEdit::editor &
     add_memb_fn({{ImGuiKey_V}, input::modifiers::control}, &editor::paste_from_clipboard);
     add_memb_fn({{ImGuiKey_C}, input::modifiers::control}, &editor::copy_to_clipboard);
     add_memb_fn({{ImGuiKey_X}, input::modifiers::control}, &editor::cut_to_clipboard);
+    add_memb_fn({{ImGuiKey_End}, input::modifiers::control}, &editor::move_cursors_to_endfile);
+    add_memb_fn({{ImGuiKey_Home}, input::modifiers::control}, &editor::move_cursors_to_begfile);
+
+    add_memb_fn({{ImGuiKey_LeftArrow}, input::modifiers::shift}, &editor::selection_toggle_left);
+    add_memb_fn({{ImGuiKey_RightArrow}, input::modifiers::shift}, &editor::selection_toggle_right);
+    add_memb_fn({{ImGuiKey_UpArrow}, input::modifiers::shift}, &editor::selection_toggle_up);
+    add_memb_fn({{ImGuiKey_DownArrow}, input::modifiers::shift}, &editor::selection_toggle_down);
+    add_memb_fn({{ImGuiKey_End}, input::shift}, &editor::selection_endline);
+    add_memb_fn({{ImGuiKey_Home}, input::shift}, &editor::selection_begline);
+
+    add_memb_fn({{ImGuiKey_LeftArrow}, input::modifiers(input::shift | input::control)},
+                &editor::selection_toggle_left_token);
+    add_memb_fn({{ImGuiKey_RightArrow}, input::modifiers(input::shift | input::control)},
+                &editor::selection_toggle_right_token);
+    add_memb_fn({{ImGuiKey_End}, input::modifiers(input::shift | input::control)}, &editor::selection_endfile);
+    add_memb_fn({{ImGuiKey_Home}, input::modifiers(input::shift | input::control)}, &editor::selection_begfile);
 
     return shortcuts;
 }

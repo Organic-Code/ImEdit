@@ -83,6 +83,20 @@ namespace ImEdit {
         void move_cursors_to_beg(); // begline
         void move_cursors_left_token(); // moves by one token to the left
         void move_cursors_right_token(); // moves by one token to the right
+        void move_cursors_to_endfile();
+        void move_cursors_to_begfile();
+
+        // Use the following methods to manipulate the selection for all cursors
+        void selection_toggle_right(); // default shift+right
+        void selection_toggle_left(); // default shift+left
+        void selection_toggle_right_token(); // default shift+ctrl+right
+        void selection_toggle_left_token(); // default shift+ctrl+left
+        void selection_toggle_up(); // default shift+up
+        void selection_toggle_down(); // default shift+down
+        void selection_begline(); // default shift+begin
+        void selection_endline(); // default shift+end
+        void selection_begfile(); // selects from cursors to the beginning of the file (default ctrl+shift+begin)
+        void selection_endfile(); // selects from cursors to the end of the file (default : ctrl+shift+end)
 
         void input_char_utf16(ImWchar c); // Simulates a keyboard input. Moves cursors
         void input_raw_char(char c); // Inputs a specific char. Moves cursors. Do not use input_raw_char('\n'), use input_newline instead.
@@ -108,6 +122,7 @@ namespace ImEdit {
         void add_shortcut(input in, void(editor::*member_function)());
         void add_shortcut(input in, void(editor::*member_function)() const);
         void clear_shortcuts() { _shortcuts.clear(); }
+
 
 
         static std::vector<std::pair<input, std::function<void(void*, editor&)>>> get_default_shortcuts();
@@ -164,6 +179,10 @@ namespace ImEdit {
         [[nodiscard]] coordinates move_coordinates_down(coordinates, unsigned int wanted_column) const noexcept;
         [[nodiscard]] coordinates move_coordinates_left(coordinates) const noexcept;
         [[nodiscard]] coordinates move_coordinates_right(coordinates) const noexcept;
+        [[nodiscard]] coordinates move_coordinates_left_token(coordinates) const noexcept;
+        [[nodiscard]] coordinates move_coordinates_right_token(coordinates) const noexcept;
+        [[nodiscard]] coordinates move_coordinates_endline(coordinates) const noexcept;
+        [[nodiscard]] coordinates move_coordinates_begline(coordinates) const noexcept;
 
         [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos);
 
@@ -175,16 +194,17 @@ namespace ImEdit {
 
         // Deletes cursors that are at the same place to leave only on of them,
         // and merges selections that should be merged together (when using multiple cursors)
-        void manage_extra_cursors();
+        void sanitize_cursors();
         void clear_cursors_within_selections();
-        void merge_selections(); // merges contiguous selections
+        void sanitize_selections(); // merges contiguous selections, delete empty selections and selections that have no associated cursors
+        void toggle_selection(region r); // sanitize_selections should be called after a call to this method/after a call to a batch on this method
 
         [[nodiscard]] ImVec2 glyph_size() const noexcept;
 
         [[nodiscard]] static ImVec2 calc_text_size(const char* text, const char* text_end = nullptr) noexcept;
 
         void find_longest_line();
-        [[nodiscard]] float calc_line_size(unsigned int line, float space_size = ImGui::CalcTextSize(" ").x) const noexcept;
+        [[nodiscard]] float calc_line_size(unsigned int line) const noexcept;
 
         void handle_kb_input();
         void handle_mouse_input();
