@@ -1453,7 +1453,17 @@ void ImEdit::editor::handle_mouse_input() {
             _cursors.emplace_back(cursor);
         } else {
             _selections.push_back({sel_beg, sel_end});
-            _cursors.emplace_back(cursor);
+
+            bool cursor_exists{false};
+            for (const auto& c : _cursors) {
+                if (coordinates_eq(c.coord, cursor.coord)) {
+                    cursor_exists = true;
+                    break;
+                }
+            }
+            if (!cursor_exists) {
+                _cursors.emplace_back(cursor);
+            }
         }
         sanitize_selections();
         clear_cursors_within_selections();
@@ -1642,52 +1652,58 @@ ImEdit::coordinates& ImEdit::editor::smaller_coordinates_of(region& r) const noe
 void ImEdit::editor::delete_selections() {
     // TODO call lexer, also with previous data
 
-    assert(_selections.empty() || _cursors.size() == _selections.size());
-    for (auto & select : _selections) {
+    // Deleting last selection first so that we don’t have to move a bunch of coordinates.
+    std::vector<region> sorted_selections = _selections;
+    std::sort(sorted_selections.begin(), sorted_selections.end(), [this](const region& r1, const region& r2) {
+        return coordinates_lt(r2.beg, r1.beg);
+    });
+    for (auto & select : sorted_selections) {
 
-        coordinates beg;
-        coordinates end;
-        if (coordinates_lt(select.beg, select.end)) {
-            beg = select.beg;
-            end = select.end;
-        } else {
-            beg = select.end;
-            end = select.beg;
-        }
+        const coordinates beg = smaller_coordinates_of(select);
+        const coordinates end = greater_coordinates_of(select);
 
-        std::vector<unsigned int> cursors_needs_move;
-        cursors_needs_move.reserve(_cursors.size());
-        for (unsigned int j = 0 ; j < _cursors.size() ; ++j) {
-            if (coordinates_within(_cursors[j].coord, _selections[j])) {
-                _cursors[j].coord = beg;
-                _cursors[j].wanted_column = column_count_to(beg);
+        // FIXME move cursors if needed
+        std::vector<unsigned int> cursor_needs_move;
+        for (unsigned int i = 0 ; i < _cursors.size() ; ++i) {
+            if (coordinates_within(_cursors[i].coord, select)) {
+                _cursors[i].coord = select.beg;
             }
-            else if (coordinates_lt(_selections[j].end, _cursors[j].coord)) {
-                cursors_needs_move.push_back(j);
+            else if (coordinates_lt(select.end, _cursors[i].coord)) {
+                cursor_needs_move.emplace_back(i);
             }
         }
-
-        std::vector<unsigned int> selections_needs_move;
-        selections_needs_move.reserve(_selections.size() - 1);
-        for (unsigned int j = 0 ; j < _selections.size() ; ++j) {
-            if (&select == &_selections[j]) {
-                continue;
-            }
-            if (coordinates_lt(select.end, _selections[j].beg)) {
-                selections_needs_move.push_back(j);
-            }
-        }
-
-        // FIXME : deal with selections_needs_move
 
         if (beg.line == end.line) {
 
             auto& line = _lines[beg.line];
             assert(!line.tokens.empty());
-            if (beg.token != end.token) {
-                unsigned int deleted_token_count = end.token - beg.token + 1;
+            if (beg.token == end.token) {
+                bool token_deleted = false;
+                line.tokens[beg.token].data.erase(beg.char_index, end.char_index - beg.char_index);
+                if (line.tokens[beg.token].data.empty()) {
+                    line.tokens.erase(std::next(line.tokens.begin(), beg.token));
+                    token_deleted = true;
+                }
 
-                line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1), std::next(line.tokens.begin(), end.token));
+                for (unsigned int idx : cursor_needs_move) {
+                    if (_cursors[idx].coord.line == end.line && _cursors[idx].coord.token == end.token) {
+                        _cursors[idx].coord.char_index -= (end.char_index - beg.char_index);
+                    }
+                }
+
+                if (token_deleted) {
+                    for (unsigned int idx : cursor_needs_move) {
+                        if (_cursors[idx].coord.line == end.line && _cursors[idx].coord.token >= end.token) {
+                            _cursors[idx].coord.token--;
+                        }
+                    }
+                }
+
+            } else {
+                unsigned int deleted_token_count = end.token - beg.token - 1;
+
+                line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1),
+                                  std::next(line.tokens.begin(), end.token));
                 if (beg.char_index == 0) {
                     ++deleted_token_count;
                     line.tokens.erase(std::next(line.tokens.begin(), beg.token));
@@ -1700,31 +1716,21 @@ void ImEdit::editor::delete_selections() {
                     line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
                 }
 
-                for (unsigned int j : cursors_needs_move) {
-                    if (_cursors[j].coord.line == beg.line) {
-                        _cursors[j].coord.token -= deleted_token_count;
-                        if (_cursors[j].coord.token == beg.token) {
-                            _cursors[j].coord.char_index -= end.char_index;
+                for (unsigned int idx : cursor_needs_move) {
+                    if (_cursors[idx].coord.line == end.line) {
+                        if (_cursors[idx].coord.token == end.token) {
+                            _cursors[idx].coord.token -= deleted_token_count;
+                            _cursors[idx].coord.char_index -= end.char_index;
+                        }
+                        else {
+                            _cursors[idx].coord.token -= deleted_token_count;
                         }
                     }
                 }
-
-            }
-            else {
-                line.tokens[beg.token].data.erase(beg.char_index, end.char_index - beg.char_index);
-                if (line.tokens[beg.token].data.empty()) {
-                    line.tokens.erase(std::next(line.tokens.begin(), beg.token));
-
-                    for (unsigned int j : cursors_needs_move) {
-                        if (_cursors[j].coord.line == beg.line) {
-                            _cursors[j].coord.token--;
-                        }
-                    }
-                }
-                // cursors_needs_move does not need any particular treatment since no token was deleted
             }
 
         } else {
+            int extra_token_deleted = 0;
             {
                 auto &beg_line = _lines[beg.line];
                 if (!beg_line.tokens.empty()) {
@@ -1732,6 +1738,7 @@ void ImEdit::editor::delete_selections() {
                         beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token + 1), beg_line.tokens.end());
                     }
                     if (beg.char_index == 0) {
+                        ++extra_token_deleted;
                         beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token));
                     } else if (beg.char_index < beg_line.tokens[beg.token].data.size()) {
                         beg_line.tokens[beg.token].data.erase(beg.char_index);
@@ -1745,6 +1752,7 @@ void ImEdit::editor::delete_selections() {
             end_line.tokens.erase(end_line.tokens.begin(), std::next(end_line.tokens.begin(), end.token));
             end_line.tokens.front().data.erase(0, end.char_index);
             if (end_line.tokens.front().data.empty()) {
+                ++extra_token_deleted;
                 end_line.tokens.erase(end_line.tokens.begin());
             }
 
@@ -1753,14 +1761,13 @@ void ImEdit::editor::delete_selections() {
             }
             _lines.erase(std::next(_lines.begin(), beg.line + 1));
 
-            for (unsigned int j : cursors_needs_move) {
-                _cursors[j].coord.line -= (end.line - beg.line);
-                if (_cursors[j].coord.line == beg.line) {
-                    if (_cursors[j].coord.token == end.token) {
-                        _cursors[j].coord.char_index -= end.char_index;
-                    }
-                    _cursors[j].coord.token += beg.token;
+            for (unsigned int idx : cursor_needs_move) {
+                if (_cursors[idx].coord.line == end.line) {
+                    _cursors[idx].coord.token += beg.token + 1;
+                    _cursors[idx].coord.token -= end.token;
+                    _cursors[idx].coord.token -= extra_token_deleted;
                 }
+                _cursors[idx].coord.line -= (end.line - beg.line);
             }
         }
     }
