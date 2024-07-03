@@ -1093,9 +1093,7 @@ void ImEdit::editor::clear_cursors_within_selections() {
             }
         }
     }
-    if (_cursors.empty()) {
-        _cursors.emplace_back();
-    }
+    assert(!_cursors.empty());
 }
 
 void ImEdit::editor::sanitize_selections() {
@@ -1113,7 +1111,7 @@ void ImEdit::editor::sanitize_selections() {
                     continue;
                 }
 
-                if (coordinates_eq(_selections[j].beg, _selections[i].end)) {
+                if (coordinates_within(_selections[j].beg, _selections[i])) {
                     perform_merge = true; // merge to be performed;
                     first = i;
                     second = j;
@@ -1133,7 +1131,21 @@ void ImEdit::editor::sanitize_selections() {
 
     } while (perform_merge);
 
-    // TODO delete empty selections and selections that have no associated cursor.
+    for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
+        bool delete_it = true;
+        if (!coordinates_eq(_selections[i].beg, _selections[i].end)) {
+            for (const cursor &c: _cursors) {
+                if (coordinates_eq(c.coord, _selections[i].beg) || coordinates_eq(c.coord, _selections[i].end)) {
+                    delete_it = false;
+                    break;
+                }
+            }
+        }
+        if (delete_it) {
+            _selections.erase(std::next(_selections.begin(), i));
+            --i;
+        }
+    }
 }
 
 void ImEdit::editor::add_cursor(coordinates coords) {
