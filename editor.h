@@ -57,6 +57,12 @@ namespace ImEdit {
     public:
         // iterates over characters
         struct iterator {
+            using difference_type = ptrdiff_t;
+            using value_type = char;
+            using reference = value_type; // no reference possible because of '\n'
+            using pointer = char*;
+            using iterator_category = std::bidirectional_iterator_tag;
+
             iterator(editor* e, coordinates c) noexcept : ed{e}, current{c} {}
             iterator(const iterator& other) noexcept = default;
             iterator& operator=(const iterator& other) noexcept = default;
