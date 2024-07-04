@@ -38,6 +38,13 @@
             _should_call_pmc = false;                                                  \
             _public_methods_callback(_public_methods_callback_data, [this](){ x(); }); \
         }
+#define IMEDIT_CALL_PMC_CAPT(x,y)                                                         \
+        bool called_pmc = false;                                                          \
+        if (_should_call_pmc && _public_methods_callback) {                               \
+            called_pmc = true;                                                            \
+            _should_call_pmc = false;                                                     \
+            _public_methods_callback(_public_methods_callback_data, [this,y](){ x(y); }); \
+        }
 #define IMEDIT_RESTORE_PMC if (called_pmc) { _should_call_pmc = true; }
 
 namespace {
@@ -163,7 +170,7 @@ ImEdit::editor::iterator &ImEdit::editor::iterator::operator--() noexcept {
 }
 
 char ImEdit::editor::iterator::operator*() const noexcept {
-    assert(ed);
+    assert(ed && "Dereferencing a default initialized iterator");
 
     if (ed->_lines[current.line].tokens.empty()) {
         return '\n';
@@ -315,6 +322,11 @@ void ImEdit::editor::render() {
         return;
     }
 
+    if (_should_grab_focus) {
+        _should_grab_focus = false;
+        ImGui::SetWindowFocus();
+    }
+
     ImGui::InvisibleButton("invisible button",
                            {draw_region.x, std::max(draw_region.y, ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size()))});
 
@@ -376,76 +388,16 @@ void ImEdit::editor::render() {
                                      *line.background);
         }
 
+        // drawing search results
+        for (region searched : _regex_results) {
+            render_region_line(searched, i, draw_region, imgui_cursor, _style.search_match_color);
+        }
+
         // Drawing selected region
         for (region select: _selections) {
-            if (coordinates_eq(select.beg, select.end)) {
-                continue;
-            }
-
-            coordinates min, max;
-            if (coordinates_lt(select.beg, select.end)) {
-                min = select.beg;
-                max = select.end;
-            } else {
-                min = select.end;
-                max = select.beg;
-            }
-
-            std::optional<ImVec2> select_draw_start, select_draw_end;
-            if (min.line == i) {
-                if (max.line == i) {
-                    // selected = [column(min), column(max)]
-                    if (min.token != 0 || min.char_index != 0) {
-                        select_draw_start = {
-                                imgui_cursor.x + static_cast<float>(column_count_to(min)) * glyph_size().x,
-                                imgui_cursor.y
-                        };
-                    } else {
-                        select_draw_start = imgui_cursor;
-                    }
-                    select_draw_end = {
-                            imgui_cursor.x + static_cast<float>(column_count_to(max)) * glyph_size().x,
-                            imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
-                    };
-                } else {
-                    // selected = [column(min), end_of_line]
-                    if (min.token != 0 || min.char_index != 0) {
-                        select_draw_start = {
-                                imgui_cursor.x + static_cast<float>(column_count_to(min)) * glyph_size().x,
-                                imgui_cursor.y
-                        };
-                    } else {
-                        select_draw_start = imgui_cursor;
-                    }
-                    select_draw_end = {
-                            imgui_cursor.x + draw_region.x,
-                            imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
-                    };
-                }
-            } else if (min.line < i) {
-                if (max.line == i) {
-                    // selected = [start_of_line, column(max)]
-                    select_draw_start = imgui_cursor;
-                    select_draw_end = {
-                            imgui_cursor.x + static_cast<float>(column_count_to(max)) * glyph_size().x,
-                            imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
-                    };
-                } else if (max.line > i) {
-                    //selected = [start_of_line, end_of_line]
-                    select_draw_start = imgui_cursor;
-                    select_draw_end = {
-                            imgui_cursor.x + draw_region.x,
-                            imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
-                    };
-                }
-
-            }
-
-            if (select_draw_start) {
-                assert(select_draw_end);
-                draw_list->AddRectFilled(*select_draw_start, *select_draw_end, _style.selection_color);
-            }
+            render_region_line(select, i, draw_region, imgui_cursor, _style.selection_color);
         }
+
 
         bool is_leading_space = true;
         unsigned int column = 0;
@@ -550,7 +502,7 @@ void ImEdit::editor::render() {
         }
 
         // Render cursor
-        if (ImGui::IsWindowFocused() || _tooltip_has_focus) {
+        if (ImGui::IsWindowFocused() || _tooltip_has_focus || _always_show_cursors) {
             for (cursor &c: _cursors) {
                 if (i == c.coord.line) {
                     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -591,7 +543,77 @@ void ImEdit::editor::render() {
     }
 }
 
+void ImEdit::editor::render_region_line(region r, unsigned int current_line, ImVec2 draw_region, ImVec2 imgui_cursor, ImColor color) noexcept {
+    if (coordinates_eq(r.beg, r.end)) {
+        return;
+    }
 
+    auto draw_list = ImGui::GetWindowDrawList();
+
+    coordinates min, max;
+    if (coordinates_lt(r.beg, r.end)) {
+        min = r.beg;
+        max = r.end;
+    } else {
+        min = r.end;
+        max = r.beg;
+    }
+
+    std::optional<ImVec2> select_draw_start, select_draw_end;
+    if (min.line == current_line) {
+        if (max.line == current_line) {
+            // selected = [column(min), column(max)]
+            if (min.token != 0 || min.char_index != 0) {
+                select_draw_start = {
+                        imgui_cursor.x + static_cast<float>(column_count_to(min)) * glyph_size().x,
+                        imgui_cursor.y
+                };
+            } else {
+                select_draw_start = imgui_cursor;
+            }
+            select_draw_end = {
+                    imgui_cursor.x + static_cast<float>(column_count_to(max)) * glyph_size().x,
+                    imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
+            };
+        } else {
+            // selected = [column(min), end_of_line]
+            if (min.token != 0 || min.char_index != 0) {
+                select_draw_start = {
+                        imgui_cursor.x + static_cast<float>(column_count_to(min)) * glyph_size().x,
+                        imgui_cursor.y
+                };
+            } else {
+                select_draw_start = imgui_cursor;
+            }
+            select_draw_end = {
+                    imgui_cursor.x + draw_region.x,
+                    imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
+            };
+        }
+    } else if (min.line < current_line) {
+        if (max.line == current_line) {
+            // selected = [start_of_line, column(max)]
+            select_draw_start = imgui_cursor;
+            select_draw_end = {
+                    imgui_cursor.x + static_cast<float>(column_count_to(max)) * glyph_size().x,
+                    imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
+            };
+        } else if (max.line > current_line) {
+            //selected = [start_of_line, end_of_line]
+            select_draw_start = imgui_cursor;
+            select_draw_end = {
+                    imgui_cursor.x + draw_region.x,
+                    imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()
+            };
+        }
+
+    }
+
+    if (select_draw_start) {
+        assert(select_draw_end);
+        draw_list->AddRectFilled(*select_draw_start, *select_draw_end, color);
+    }
+}
 
 ImEdit::editor::editor(std::string id) :
         _lines{},
@@ -605,6 +627,7 @@ ImEdit::editor::editor(std::string id) :
 void ImEdit::editor::move_cursors_up() {
     IMEDIT_CALL_PMC(move_cursors_up)
 
+    clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_up(cursor.coord, cursor.wanted_column);
     }
@@ -618,6 +641,7 @@ void ImEdit::editor::move_cursors_up() {
 void ImEdit::editor::move_cursors_down() {
     IMEDIT_CALL_PMC(move_cursors_down)
 
+    clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_down(cursor.coord, cursor.wanted_column);
     }
@@ -629,6 +653,7 @@ void ImEdit::editor::move_cursors_down() {
 void ImEdit::editor::move_cursors_left() {
     IMEDIT_CALL_PMC(move_cursors_left)
 
+    clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_left(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
@@ -641,6 +666,7 @@ void ImEdit::editor::move_cursors_left() {
 void ImEdit::editor::move_cursors_right() {
     IMEDIT_CALL_PMC(move_cursors_right)
 
+    clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_right(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
@@ -678,6 +704,7 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_down(coordinates coord, uns
 void ImEdit::editor::move_cursors_left_token() {
     IMEDIT_CALL_PMC(move_cursors_left_token)
 
+    clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_left_token(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
@@ -692,6 +719,7 @@ void ImEdit::editor::move_cursors_left_token() {
 void ImEdit::editor::move_cursors_right_token() {
     IMEDIT_CALL_PMC(move_cursors_right_token)
 
+    clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_right_token(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
@@ -705,6 +733,7 @@ void ImEdit::editor::move_cursors_right_token() {
 void ImEdit::editor::move_cursors_to_beg() {
     IMEDIT_CALL_PMC(move_cursors_to_beg)
 
+    clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_begline(cursor.coord);
         cursor.wanted_column = 0;
@@ -718,6 +747,7 @@ void ImEdit::editor::move_cursors_to_beg() {
 void ImEdit::editor::move_cursors_to_end() {
     IMEDIT_CALL_PMC(move_cursors_to_end)
 
+    clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_endline(cursor.coord);
         cursor.wanted_column = column_count_to(cursor.coord);
@@ -731,6 +761,7 @@ void ImEdit::editor::move_cursors_to_end() {
 void ImEdit::editor::move_cursors_to_endfile() {
     IMEDIT_CALL_PMC(move_cursors_to_endfile)
 
+    clear_search();
     _cursors.clear();
     _selections.clear();
     cursor c;
@@ -753,6 +784,7 @@ void ImEdit::editor::move_cursors_to_endfile() {
 void ImEdit::editor::move_cursors_to_begfile() {
     IMEDIT_CALL_PMC(move_cursors_to_begfile)
 
+    clear_search();
     _cursors.clear();
     _selections.clear();
     _cursors.emplace_back();
@@ -1780,12 +1812,7 @@ ImVec2 ImEdit::editor::glyph_size() const noexcept {
 }
 
 void ImEdit::editor::add_selection(region r) noexcept {
-    bool called_pmc = false;
-    if (_should_call_pmc && _public_methods_callback) {
-        called_pmc = true;
-        _should_call_pmc = false;
-        _public_methods_callback(_public_methods_callback_data, [this, r](){ add_selection(r); });
-    }
+    IMEDIT_CALL_PMC_CAPT(add_selection, r)
 
     _cursors.push_back({r.end, column_count_to(r.end)});
     if (coordinates_lt(r.end, r.beg)) {
@@ -1793,9 +1820,7 @@ void ImEdit::editor::add_selection(region r) noexcept {
     }
     _selections.emplace_back(r);
 
-    if (called_pmc) {
-        _should_call_pmc = true;
-    }
+    IMEDIT_RESTORE_PMC
 }
 
 ImVec2 ImEdit::editor::calc_text_size(const char *text, const char *text_end) noexcept {
@@ -1842,6 +1867,8 @@ void ImEdit::editor::delete_selections() {
     IMEDIT_CALL_PMC(delete_selections)
 
     // TODO call lexer, also with previous data
+    // FIXME deleting a selection while cursor is at the beginning causes bad cursor placement
+
 
     // Deleting last selection first so that we don’t have to move a bunch of coordinates.
     std::vector<region> sorted_selections = _selections;
@@ -1857,9 +1884,9 @@ void ImEdit::editor::delete_selections() {
         std::vector<unsigned int> cursor_needs_move;
         for (unsigned int i = 0 ; i < _cursors.size() ; ++i) {
             if (coordinates_within(_cursors[i].coord, select)) {
-                _cursors[i].coord = select.beg;
+                _cursors[i].coord = beg;
             }
-            else if (coordinates_lt(select.end, _cursors[i].coord)) {
+            else if (coordinates_lt(end, _cursors[i].coord)) {
                 cursor_needs_move.emplace_back(i);
             }
         }
@@ -1968,15 +1995,96 @@ void ImEdit::editor::delete_selections() {
     IMEDIT_RESTORE_PMC
 }
 
-void ImEdit::editor::input_char_utf16(ImWchar ch) {
-    bool called_pmc = false;
-    if (_should_call_pmc && _public_methods_callback) {
-        called_pmc = true;
-        _should_call_pmc = false;
-        _public_methods_callback(_public_methods_callback_data, [this, ch](){ input_char_utf16(ch); });
+bool ImEdit::editor::has_match() {
+    return !_regex_results.empty();
+}
+
+void ImEdit::editor::clear_search() {
+    _regex_results.clear();
+    _regex_results_index = 0;
+}
+
+
+bool ImEdit::editor::regex_search(const std::regex &regex, std::regex_constants::match_flag_type flags) {
+    IMEDIT_CALL_PMC_CAPT(regex_search, regex)
+    assert(!(flags & std::regex_constants::match_prev_avail) && "Invalid flag input");
+
+    clear_search();
+    for (auto match_iterator = std::regex_iterator(begin(), end(), regex, flags); match_iterator != std::regex_iterator<iterator>{} ; ++match_iterator) {
+        const std::match_results<editor::iterator>& match = *match_iterator;
+        _regex_results.push_back({match[0].first.get_coord(), match[0].second.get_coord()});
     }
 
+    IMEDIT_RESTORE_PMC
+    return has_match();
+}
 
+bool ImEdit::editor::select_next() {
+    IMEDIT_CALL_PMC(select_next)
+    if (!has_match()) {
+        return false;
+    }
+
+    if (_regex_results_index == _regex_results.size()) {
+        _regex_results_index = 0;
+    }
+
+    _selections.clear();
+    _cursors.clear();
+    _selections.push_back(_regex_results[_regex_results_index]);
+    const auto& end = _regex_results[_regex_results_index].end;
+    _cursors.push_back({end, column_count_to(end)});
+
+
+    IMEDIT_RESTORE_PMC
+    return ++_regex_results_index == _regex_results.size();
+}
+
+bool ImEdit::editor::select_previous() {
+    IMEDIT_CALL_PMC(select_previous)
+    if (!has_match()) {
+        return false;
+    }
+
+    if (_regex_results_index == 0) {
+        _regex_results_index = _regex_results.size();
+    }
+    --_regex_results_index;
+
+    _selections.clear();
+    _cursors.clear();
+    _selections.push_back(_regex_results[_regex_results_index]);
+    const auto& end = _regex_results[_regex_results_index].end;
+    _cursors.push_back({end, column_count_to(end)});
+
+
+
+    IMEDIT_RESTORE_PMC
+    return _regex_results_index == 0;
+}
+
+void ImEdit::editor::select_all() {
+    IMEDIT_CALL_PMC(select_previous)
+    if (!has_match()) {
+        return;
+    }
+
+    _selections.clear();
+    _cursors.clear();
+    for (region r : _regex_results) {
+        _selections.push_back(r);
+        _cursors.push_back({r.end, column_count_to(r.end)});
+    }
+
+    IMEDIT_RESTORE_PMC
+}
+
+
+void ImEdit::editor::input_char_utf16(ImWchar ch) {
+    IMEDIT_CALL_PMC_CAPT(input_char_utf16, ch)
+
+
+    clear_search();
     for (cursor& c : _cursors) {
         if (_lines[c.coord.line].tokens.empty()) {
             _lines[c.coord.line].tokens.push_back({"", token_type::unknown});
@@ -2029,14 +2137,10 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
 }
 
 void ImEdit::editor::input_raw_char(char ch) {
-    bool called_pmc = false;
-    if (_should_call_pmc && _public_methods_callback) {
-        called_pmc = true;
-        _should_call_pmc = false;
-        _public_methods_callback(_public_methods_callback_data, [this, ch](){ input_raw_char(ch); });
-    }
+    IMEDIT_CALL_PMC_CAPT(input_raw_char, ch)
 
 
+    clear_search();
     assert(ch != '\n' && "Call input_newline() instead");
     for (cursor& c : _cursors) {
         input_raw_char(ch, c);
@@ -2063,6 +2167,7 @@ void ImEdit::editor::input_newline() {
     IMEDIT_CALL_PMC(input_newline)
 
     // TODO : call lexer, also with previous data
+    clear_search();
     delete_selections();
     for (cursor& c : _cursors) {
         _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
@@ -2104,6 +2209,7 @@ void ImEdit::editor::input_newline() {
 void ImEdit::editor::input_newline_nomove() {
     IMEDIT_CALL_PMC(input_newline)
 
+    clear_search();
     for (cursor& c : _cursors) {
         _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
         for (cursor& c2 : _cursors) {
@@ -2119,6 +2225,7 @@ void ImEdit::editor::input_newline_nomove() {
 void ImEdit::editor::input_delete() {
     IMEDIT_CALL_PMC(input_delete)
 
+    clear_search();
     if (!_selections.empty()) {
         delete_selections();
     } else {
@@ -2138,6 +2245,7 @@ void ImEdit::editor::input_delete() {
 void ImEdit::editor::input_backspace() {
     IMEDIT_CALL_PMC(input_backspace)
 
+    clear_search();
     if (!_selections.empty()) {
         delete_selections();
     } else {
@@ -2402,12 +2510,13 @@ std::vector<std::pair<ImEdit::input, std::function<void(void *, ImEdit::editor &
 
 ImEdit::style ImEdit::editor::get_default_style() {
     struct style s{};
-    s.cursor_color                                = ImColor(255, 255, 255, 255);
-    s.background_color                            = ImColor( 43,  43,  43, 255);
-    s.selection_color                             = ImColor( 33,  66, 131, 255);
-    s.line_number_color                           = ImColor(158, 160, 159, 255);
-    s.line_number_separator_color                 = ImColor( 55,  55,  55, 255);
-    s.current_line_color                          = ImColor( 50,  50,  50, 255);
+    s.cursor_color                               = ImColor(255, 255, 255, 255);
+    s.background_color                           = ImColor( 43,  43,  43, 255);
+    s.selection_color                            = ImColor( 33,  66, 131, 255);
+    s.search_match_color                         = ImColor( 60,  89,  61, 255);
+    s.line_number_color                          = ImColor(158, 160, 159, 255);
+    s.line_number_separator_color                = ImColor( 55,  55,  55, 255);
+    s.current_line_color                         = ImColor( 50,  50,  50, 255);
     s.token_style[token_type::unknown]           = token_style{ImColor(  0,   0,   0, 255), false, false};
     s.token_style[token_type::keyword]           = token_style{ImColor(210,  40,  58, 255), false, false};
     s.token_style[token_type::comment]           = token_style{ImColor(120, 120, 120, 255), false,  true};

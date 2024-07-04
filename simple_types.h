@@ -114,6 +114,7 @@ namespace ImEdit {
         ImColor cursor_color{};
         ImColor background_color{};
         ImColor selection_color{};
+        ImColor search_match_color{};
         ImColor line_number_color{};
         ImColor line_number_separator_color{};
         ImColor current_line_color{};

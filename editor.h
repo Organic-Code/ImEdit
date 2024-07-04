@@ -34,6 +34,7 @@
 #include <functional>
 #include <variant>
 #include <chrono>
+#include <regex>
 
 #if __has_include(<imgui.h>)
 #include <imgui.h>
@@ -48,6 +49,7 @@
 
 namespace ImEdit {
 
+    // TODO add noexcept where it’s due
     class editor {
         /*************************************************************************************
          *
@@ -63,6 +65,7 @@ namespace ImEdit {
             using pointer = char*;
             using iterator_category = std::bidirectional_iterator_tag;
 
+            iterator() = default;
             iterator(editor* e, coordinates c) noexcept : ed{e}, current{c} {}
             iterator(const iterator& other) noexcept = default;
             iterator& operator=(const iterator& other) noexcept = default;
@@ -79,8 +82,8 @@ namespace ImEdit {
             [[nodiscard]] editor& editor() noexcept { return *ed; };
 
         private:
-            class editor* ed;
-            coordinates current;
+            class editor* ed{nullptr};
+            coordinates current{};
         };
 
 
@@ -134,12 +137,29 @@ namespace ImEdit {
         static std::vector<std::pair<input, std::function<void(void*, editor&)>>> get_default_shortcuts();
         static style get_default_style(); // similar to monokai
 
+        // checks if there is a current regex match (see editor::regex_search)
+        bool has_match();
+        void clear_search();
+
+        void grab_focus() { _should_grab_focus = true; }
 
         /**
          * All the following methods call _public_methods_callback
          */
         void add_selection(region r) noexcept;
         void delete_selections(); // delete the contents of every selection
+
+        // discards previous selections, discards all cursors but the last. Call this before calling select_next
+        // return true if any match was found
+        // Any call to move_cursor_* or input_* clears the search.
+        bool regex_search(const std::regex& regex, std::regex_constants::match_flag_type = std::regex_constants::match_default);
+        // Selects the next value considered by regex_search
+        // returns false if there are no next matches. Calling select_next while on last occurrence will loop back to first occurrence
+        bool select_next();
+        // returns false if there is no previous match. Calling select_previous while on first occurrence will loop back to last occurrence
+        bool select_previous();
+        // Selects all matching occurences
+        void select_all();
 
         void copy_to_clipboard() const;
         void paste_from_clipboard();
@@ -209,6 +229,8 @@ namespace ImEdit {
         std::function<void(void* data, std::function<void()>)> _public_methods_callback{}; // TODO explain this. Mention editor::_allow_mouse_input
         void* _public_methods_callback_data{nullptr};
 
+        bool _always_show_cursors{false}; // By default, cursor is hidden when editor isn’t focused.
+
 
     /*************************************************************************************
      *
@@ -253,15 +275,16 @@ namespace ImEdit {
         void toggle_selection(region r); // sanitize_selections should be called after a call to this method/after a call to a batch on this method
 
         [[nodiscard]] ImVec2 glyph_size() const noexcept;
-
         [[nodiscard]] static ImVec2 calc_text_size(const char* text, const char* text_end = nullptr) noexcept;
-
         void find_longest_line();
         [[nodiscard]] float calc_line_size(unsigned int line) const noexcept;
 
         void handle_kb_input();
         void handle_mouse_input();
+
         float compute_extra_padding() const noexcept;
+
+        void render_region_line(region r, unsigned int current_line, ImVec2 draw_region, ImVec2 imgui_cursor, ImColor c) noexcept;
 
         // Input a char at a specific cursor coordinates
         void input_raw_char(char c, cursor& pos);
@@ -293,8 +316,12 @@ namespace ImEdit {
 
         bool _scroll_up_next_frame{false};
         bool _scroll_down_next_frame{false};
+        bool _should_grab_focus{false};
 
         mutable bool _should_call_pmc{true}; // if public function call and this is true, set to false, call _public_methods_callback, and re-set to true before function exit
+
+        std::vector<region> _regex_results{};
+        unsigned int _regex_results_index{};
     };
 }
 
