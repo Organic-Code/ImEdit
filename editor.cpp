@@ -1589,9 +1589,10 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         str.erase(co.char_index, char_count_for_utf8(str[co.char_index]));
 
         for (cursor& cursor : _cursors) {
-            if (cursor.coord.line == deleted_coord.line && cursor.coord.token == deleted_coord.token
-                && cursor.coord.char_index >= deleted_coord.char_index) {
-                cursor.coord.char_index -= char_count;
+            if (cursor.coord.line == deleted_coord.line && cursor.coord.token == deleted_coord.token) {
+                if (cursor.coord.char_index >= deleted_coord.char_index && cursor.coord.char_index != 0) {
+                    cursor.coord.char_index -= char_count;
+                }
             }
         }
 
