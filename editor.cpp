@@ -360,6 +360,8 @@ void ImEdit::editor::render() {
                              _style.background_color);
 
     auto tooltip_this_frame = _tooltips.end();
+    auto mouse_coord = screen_to_token_coordinates(ImGui::GetMousePos());
+
     for (unsigned int i = first_rendered_line ; i < last_rendered_line ; ++i) {
         const line &line = _lines[i];
 
@@ -370,12 +372,35 @@ void ImEdit::editor::render() {
                                      _style.current_line_color);
         }
 
-        // drawing line numbers
-        auto line_number = std::to_string(i);
-        auto extra_shift = static_cast<float>(line_numbers_max_glyphs - line_number.size()) * space_length.x;
 
-        draw_list->AddText({imgui_cursor.x + extra_shift, imgui_cursor.y}, _style.line_number_color,
-                           line_number.c_str());
+        // Rendering leftmost padding with line numbers
+        if (line.has_breakpoint) {
+            auto radius = space_length.y / 3;
+            draw_list->AddCircleFilled({
+                    imgui_cursor.x + space_length.x / 2 + static_cast<float>(line_numbers_max_glyphs - 1) * space_length.x,
+                    imgui_cursor.y + space_length.y / 2},
+                   radius, _style.breakpoint_color);
+        }
+        else if (is_mouse_in_breakpoint_column() && mouse_coord.line == i) {
+
+            auto radius = space_length.y / 3;
+            draw_list->AddCircleFilled({
+                    imgui_cursor.x + space_length.x / 2 + static_cast<float>(line_numbers_max_glyphs - 1) * space_length.x,
+                    imgui_cursor.y + space_length.y / 2},
+                   radius, _style.breakpoint_hover_color);
+        }
+        else {
+            // drawing line numbers
+            auto line_number = std::to_string(i);
+            auto extra_shift = static_cast<float>(line_numbers_max_glyphs - line_number.size()) * space_length.x;
+
+            draw_list->AddText({imgui_cursor.x + extra_shift, imgui_cursor.y}, _style.line_number_color,
+                               line_number.c_str());
+        }
+
+
+
+
 
         imgui_cursor.x += extra_padding - 5;
         draw_list->AddLine(imgui_cursor, {imgui_cursor.x, imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
@@ -536,6 +561,10 @@ void ImEdit::editor::render() {
         show_tooltip();
     } else {
         reset_current_tooltip();
+    }
+
+    if (_showing_breakpoint_window) {
+        show_breakpoint_window();
     }
 
     if (_default_font != nullptr) {
@@ -1380,6 +1409,12 @@ ImEdit::coordinates ImEdit::editor::mouse_position() {
     return cbl.as_default_coords();
 }
 
+void ImEdit::editor::set_line_color(unsigned int line, std::optional<ImColor> color) noexcept {
+    assert(line < _lines.size());
+    _lines[line].background = color;
+}
+
+
 void ImEdit::editor::clear() {
     _cursors.clear();
     _tooltips.clear();
@@ -1630,52 +1665,58 @@ void ImEdit::editor::handle_mouse_input() {
     const bool shift = im_io.KeyShift;
 
 
-
-    bool is_in_a_selection = false;
-    coordinates coord = mouse_coord.as_default_coords();
-    for (const auto& sel : _selections) {
-        if (coordinates_within(coord, sel)) {
-            is_in_a_selection = true;
-            break;
-        }
-    }
-
     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-        coordinates sel_beg = coord;
-        sel_beg.char_index = 0;
-        coordinates sel_end = coord;
-        sel_end.char_index = _lines[sel_end.line].tokens[sel_end.token].data.size();
+        _showing_breakpoint_window = false;
 
-        cursor cursor{sel_end, column_count_to(sel_end)};
-        if (!ctrl) {
-            _selections.clear();
-            _selections.push_back({sel_beg, sel_end});
-            _cursors.clear();
-            _cursors.emplace_back(cursor);
-        } else {
-            _selections.push_back({sel_beg, sel_end});
+        if (!mouse_coord.is_left) {
+            coordinates coord = mouse_coord.as_default_coords();
+            coordinates sel_beg = coord;
+            sel_beg.char_index = 0;
+            coordinates sel_end = coord;
+            sel_end.char_index = _lines[sel_end.line].tokens[sel_end.token].data.size();
 
-            bool cursor_exists{false};
-            for (const auto& c : _cursors) {
-                if (coordinates_eq(c.coord, cursor.coord)) {
-                    cursor_exists = true;
-                    break;
+            cursor cursor{sel_end, column_count_to(sel_end)};
+            if (!ctrl) {
+                _selections.clear();
+                _selections.push_back({sel_beg, sel_end});
+                _cursors.clear();
+                _cursors.emplace_back(cursor);
+            } else {
+                _selections.push_back({sel_beg, sel_end});
+
+                bool cursor_exists{false};
+                for (const auto &c: _cursors) {
+                    if (coordinates_eq(c.coord, cursor.coord)) {
+                        cursor_exists = true;
+                        break;
+                    }
+                }
+                if (!cursor_exists) {
+                    _cursors.emplace_back(cursor);
                 }
             }
-            if (!cursor_exists) {
-                _cursors.emplace_back(cursor);
-            }
+            sanitize_selections();
+            clear_cursors_within_selections();
         }
-        sanitize_selections();
-        clear_cursors_within_selections();
     }
     else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        if (!ctrl) {
+        _showing_breakpoint_window = false;
+
+        if (is_mouse_in_breakpoint_column()) {
+            if (mouse_coord.line < _lines.size()) {
+                _lines[mouse_coord.line].has_breakpoint = !_lines[mouse_coord.line].has_breakpoint;
+                _breakpoint_toggled(_breakpoint_data, mouse_coord.line, *this);
+            }
+        }
+        else if (!ctrl) {
+            coordinates coord = mouse_coord.as_default_coords();
+
             _selections.clear();
             _cursors.clear();
             _cursors.push_back({coord, column_count_to(coord)});
         }
         else {
+            coordinates coord = mouse_coord.as_default_coords();
 
             auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &coord](const cursor &cursor) {
                 return coordinates_eq(cursor.coord, coord);
@@ -1697,11 +1738,23 @@ void ImEdit::editor::handle_mouse_input() {
             }
         }
     }
+    else if (ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+        if (_showing_breakpoint_window) {
+            _showing_breakpoint_window = false;
+        }
+        else if (is_mouse_in_breakpoint_column()) {
+            if (mouse_coord.line < _lines.size()) {
+                _selected_breakpoint_line = mouse_coord.line;
+                _showing_breakpoint_window = true;
+                _breakpoint_window_just_opened = true;
+            }
+        }
+    }
 
     _last_frame_mouse_coords = mouse_coord;
 }
 
-ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) {
+ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) const {
     // TODO what about folded regions?
     auto glyph_size = editor::glyph_size();
     coordinates_cbl coords;
@@ -1716,7 +1769,8 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
 
     if (pos.x < 0) {
         coords.is_left = true;
-        coords.token = coords.char_index = 0;
+        coords.token = 0;
+        coords.char_index = static_cast<unsigned int>(std::round(-pos.x / glyph_size.x));
         return coords;
     }
     auto base_coords = coordinates_for(static_cast<unsigned>(std::round(pos.x / glyph_size.x)), line);
@@ -2257,6 +2311,22 @@ void ImEdit::editor::input_backspace() {
     IMEDIT_RESTORE_PMC
 }
 
+
+void ImEdit::editor::add_breakpoint(unsigned int line_no) noexcept {
+    assert(line_no < _lines.size());
+    _lines[line_no].has_breakpoint = true;
+}
+
+void ImEdit::editor::remove_breakpoint(unsigned int line_no) noexcept {
+    assert(line_no < _lines.size());
+    _lines[line_no].has_breakpoint = false;
+}
+
+bool ImEdit::editor::has_breakpoint(unsigned int line_no) noexcept {
+    assert(line_no < _lines.size());
+    return _lines[line_no].has_breakpoint;
+}
+
 void ImEdit::editor::show_tooltip() {
 
     if (_tooltip_chrono && std::chrono::system_clock::now() - *_tooltip_chrono > _tooltip_delay) {
@@ -2294,6 +2364,18 @@ void ImEdit::editor::show_tooltip() {
         }
         ImGui::End();
     }
+}
+
+void ImEdit::editor::show_breakpoint_window() {
+    if (_breakpoint_window_just_opened) {
+       ImGui::SetNextWindowPos(ImGui::GetMousePos() + ImVec2{5, 5});
+       _breakpoint_window_just_opened = false;
+    }
+    if (ImGui::Begin("##breakpoint", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize)) {
+        assert(_breakpoint_window_filler);
+        _breakpoint_window_filler(_breakpoint_data, _selected_breakpoint_line, *this);
+    }
+    ImGui::End();
 }
 
 void ImEdit::editor::reset_current_tooltip() {
@@ -2517,6 +2599,8 @@ ImEdit::style ImEdit::editor::get_default_style() {
     s.line_number_color                          = ImColor(158, 160, 159, 255);
     s.line_number_separator_color                = ImColor( 55,  55,  55, 255);
     s.current_line_color                         = ImColor( 50,  50,  50, 255);
+    s.breakpoint_color                           = ImColor(219,  92,  92, 255);
+    s.breakpoint_hover_color                     = ImColor(219,  92,  92, 100);
     s.token_style[token_type::unknown]           = token_style{ImColor(  0,   0,   0, 255), false, false};
     s.token_style[token_type::keyword]           = token_style{ImColor(210,  40,  58, 255), false, false};
     s.token_style[token_type::comment]           = token_style{ImColor(120, 120, 120, 255), false,  true};
@@ -2534,4 +2618,9 @@ ImEdit::style ImEdit::editor::get_default_style() {
     s.token_style[token_type::punctuation]       = token_style{ImColor(226, 214, 187, 255), false, false};
     s.token_style[token_type::max]               = token_style{ImColor(  0,   0,   0, 255), false, false};
     return s;
+}
+
+bool ImEdit::editor::is_mouse_in_breakpoint_column() const noexcept {
+    auto mouse_coord = screen_to_token_coordinates(ImGui::GetMousePos());
+    return _breakpoint_toggled && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && mouse_coord.is_left && mouse_coord.char_index > 1;
 }

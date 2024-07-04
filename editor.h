@@ -102,6 +102,7 @@ namespace ImEdit {
         void set_data(const std::string& data);
         void set_data(std::deque<line> lines);
         [[nodiscard]] const std::deque<line>& get_data() const noexcept { return _lines; }
+        void set_line_color(unsigned int line, std::optional<ImColor> color) noexcept;
 
         [[nodiscard]] const std::vector<region>& get_selections() const noexcept { return _selections; }
 
@@ -195,6 +196,10 @@ namespace ImEdit {
         void input_delete(); // deletes the char after each cursor
         void input_backspace(); // deletes the char before each cursor
 
+        // see editor::_breakpoints_tooltip_generator and editor::_breakpoint_toggled
+        void add_breakpoint(unsigned int line_no) noexcept;
+        void remove_breakpoint(unsigned int line_no) noexcept;
+        bool has_breakpoint(unsigned int line_no) noexcept;
 
 
 
@@ -224,10 +229,15 @@ namespace ImEdit {
         std::chrono::milliseconds _tooltip_delay{std::chrono::seconds(1)}; // Delay before the tooltip appears
         std::chrono::milliseconds _tooltip_grace_period{std::chrono::milliseconds(250)}; // Delay for which the tooltip stays up, even after the mouse went away
 
-        void* _shortcuts_data{nullptr}; // Passed to shortcut callbacks as user data
+        void* _shortcuts_data{nullptr}; // Passed to shortcut callbacks as user data (see editor::add_shortcut)
 
         std::function<void(void* data, std::function<void()>)> _public_methods_callback{}; // TODO explain this. Mention editor::_allow_mouse_input
         void* _public_methods_callback_data{nullptr};
+
+        // data is filled by _breakpoint_data
+        std::function<void(void* data, unsigned int line_number, editor& this_editor)> _breakpoint_window_filler{}; // This function is called to fill the breakpoint tooltip. The tooltip is a regular ImGui window
+        std::function<void(void* data, unsigned int line_number, editor& this_editor)> _breakpoint_toggled{}; // called whenever a breakpoint is added or removed. If empty, breakpoints can’t be added or removed via a click anymore
+        void* _breakpoint_data{nullptr};
 
         bool _always_show_cursors{false}; // By default, cursor is hidden when editor isn’t focused.
 
@@ -255,7 +265,7 @@ namespace ImEdit {
         [[nodiscard]] coordinates move_coordinates_endline(coordinates) const noexcept;
         [[nodiscard]] coordinates move_coordinates_begline(coordinates) const noexcept;
 
-        [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos);
+        [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos) const;
 
         [[nodiscard]] bool coordinates_eq(coordinates lhs, coordinates rhs) const noexcept;
         [[nodiscard]] bool coordinates_lt(coordinates lhs, coordinates rhs) const noexcept;
@@ -266,6 +276,8 @@ namespace ImEdit {
         [[nodiscard]] region sorted_region(region) const noexcept;
         [[nodiscard]] coordinates& greater_coordinates_of(region&) const noexcept;
         [[nodiscard]] coordinates& smaller_coordinates_of(region&) const noexcept;
+
+        [[nodiscard]] bool is_mouse_in_breakpoint_column() const noexcept;
 
         // Deletes cursors that are at the same place to leave only on of them,
         // and merges selections that should be merged together (when using multiple cursors)
@@ -290,6 +302,7 @@ namespace ImEdit {
         void input_raw_char(char c, cursor& pos);
 
         void show_tooltip();
+        void show_breakpoint_window();
 
         std::vector<cursor> _cursors{};
         std::deque<line> _lines{};
@@ -317,6 +330,10 @@ namespace ImEdit {
         bool _scroll_up_next_frame{false};
         bool _scroll_down_next_frame{false};
         bool _should_grab_focus{false};
+
+        bool _showing_breakpoint_window{false};
+        bool _breakpoint_window_just_opened{true};
+        unsigned int _selected_breakpoint_line{0};
 
         mutable bool _should_call_pmc{true}; // if public function call and this is true, set to false, call _public_methods_callback, and re-set to true before function exit
 

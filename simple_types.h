@@ -97,6 +97,7 @@ namespace ImEdit {
     struct line {
         std::deque<token> tokens{};
         std::optional<ImColor> background{};
+        bool has_breakpoint{false};
     };
 
     struct token_style {
@@ -118,6 +119,8 @@ namespace ImEdit {
         ImColor line_number_color{};
         ImColor line_number_separator_color{};
         ImColor current_line_color{};
+        ImColor breakpoint_color{};
+        ImColor breakpoint_hover_color{};
         std::unordered_map<token_type::enum_, token_style, token_type> token_style{};
     };
 
@@ -132,7 +135,7 @@ namespace ImEdit {
         bool is_left{false}; // true: token == 0, glyph indicates how many glyphs to the left the coord is.
 
         [[nodiscard]] coordinates as_default_coords() const noexcept {
-            assert(char_index >= 0);
+            assert(!is_left || char_index == 0);
             return {line, token, char_index};
         }
     };
