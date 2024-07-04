@@ -1643,13 +1643,22 @@ void ImEdit::editor::handle_mouse_input() {
             _cursors.clear();
             _cursors.push_back({coord, column_count_to(coord)});
         }
-        else if (ctrl) {
+        else {
 
             auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &coord](const cursor &cursor) {
                 return coordinates_eq(cursor.coord, coord);
             });
             if (it == _cursors.end()) {
-                _cursors.push_back({coord, column_count_to(coord)});
+                bool is_within_selection = false;
+                for (const auto& r : _selections) {
+                    if (coordinates_within_ex(coord, r)) {
+                        is_within_selection = true;
+                        break;
+                    }
+                }
+                if (!is_within_selection) {
+                    _cursors.push_back({coord, column_count_to(coord)});
+                }
             } else if (_cursors.size() > 1) { // don’t erase last cursor
                 _cursors.erase(it);
                 sanitize_selections();
