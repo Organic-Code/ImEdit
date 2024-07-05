@@ -142,6 +142,12 @@ namespace ImEdit {
         }
     };
 
+    // used for records, as tokenizer can fiddle with tokens
+    struct simple_coord {
+        unsigned int line{};
+        unsigned int char_index{};
+    };
+
     struct cursor {
         coordinates coord{};
         unsigned int wanted_column{}; // where the cursor wishes to be at (can be more to the right than possible on a given line)
@@ -150,6 +156,11 @@ namespace ImEdit {
     struct region {
         coordinates beg{};
         coordinates end{};
+    };
+
+    struct simple_region {
+        simple_coord beg{};
+        simple_coord end{};
     };
 
     struct input {
@@ -165,6 +176,72 @@ namespace ImEdit {
         modifiers mod_flag{none};
     };
 
+    struct record {
+
+        // cursor positions
+        struct cursor_position {
+            std::vector<simple_region> selections;
+            std::vector<simple_coord> positions;
+        };
+
+        // char deletion
+        struct chars_deletion {
+            std::vector<char> deleted_chars;
+            simple_coord delete_location;
+            bool token_deleted;
+
+            std::vector<simple_coord> cursors_coords;
+        };
+
+        // char addition
+        struct chars_addition {
+            std::vector<char> added_chars;
+            simple_coord add_location;
+            bool added_token;
+
+            std::vector<simple_coord> cursors_coords;
+        };
+
+        // new line
+        struct new_line {
+            simple_coord new_line_location;
+
+            std::vector<simple_coord> cursors_coords;
+        };
+
+        // line deletion
+        struct del_line {
+            simple_coord line_deletion_location;
+
+            std::vector<simple_coord> cursors_coords;
+        };
+
+        // selection deletion
+        struct del_selection {
+            std::vector<line> deleted_selections;
+            simple_region selection_location;
+
+            std::vector<simple_coord> cursors_coords;
+        };
+
+        // pasting
+        struct paste {
+            std::vector<simple_coord> coordinates;
+            std::string data;
+
+            std::vector<simple_coord> cursors_coords;
+        };
+
+        std::variant<
+                std::monostate,
+                cursor_position,
+                chars_deletion,
+                chars_addition,
+                new_line,
+                del_line,
+                del_selection,
+                paste> value;
+    };
 }
 
 #endif //IMEDIT_SIMPLE_TYPES_H

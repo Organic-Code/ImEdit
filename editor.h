@@ -35,6 +35,7 @@
 #include <variant>
 #include <chrono>
 #include <regex>
+#include <list>
 
 #if __has_include(<imgui.h>)
 #include <imgui.h>
@@ -147,8 +148,13 @@ namespace ImEdit {
         /**
          * All the following methods call _public_methods_callback
          */
+        void delete_extra_cursors(); // keeps only one cursor
+
         void add_selection(region r) noexcept;
         void delete_selections(); // delete the contents of every selection
+
+        void undo();
+        void redo();
 
         // discards previous selections, discards all cursors but the last. Call this before calling select_next
         // return true if any match was found
@@ -200,8 +206,6 @@ namespace ImEdit {
         void add_breakpoint(unsigned int line_no) noexcept;
         void remove_breakpoint(unsigned int line_no) noexcept;
         bool has_breakpoint(unsigned int line_no) noexcept;
-
-
 
         bool _allow_keyboard_input{true}; // set to false to inhibit keyboard management
         bool _allow_mouse_input{true}; // set to false to inhibit mouse management
@@ -273,6 +277,13 @@ namespace ImEdit {
         [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
         [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
 
+        [[nodiscard]] simple_coord to_simple_coords(coordinates) const noexcept;
+        [[nodiscard]] std::vector<simple_coord> cursors_as_simple() const;
+        [[nodiscard]] std::vector<simple_region> selections_as_simple() const;
+        [[nodiscard]] coordinates from_simple_coords(simple_coord) const noexcept;
+        [[nodiscard]] std::vector<cursor> cursors_from_simple(const std::vector<simple_coord>&) const;
+        [[nodiscard]] std::vector<region> selections_from_simple(const std::vector<simple_region>&) const;
+
         [[nodiscard]] region sorted_region(region) const noexcept;
         [[nodiscard]] coordinates& greater_coordinates_of(region&) const noexcept;
         [[nodiscard]] coordinates& smaller_coordinates_of(region&) const noexcept;
@@ -303,6 +314,14 @@ namespace ImEdit {
 
         void show_tooltip();
         void show_breakpoint_window();
+
+        void add_cursor_undo_record();
+        void add_char_deletion_record(std::vector<char>, coordinates, bool deleted_token);
+        void add_char_addition_record(std::vector<char>, coordinates, bool added_token);
+        void add_line_addition_record(coordinates);
+        void add_line_deletion_record(coordinates);
+        void add_selection_deletion_record(std::vector<line>, region);
+        void add_paste_record(const std::vector<coordinates>& coord, std::string data);
 
         std::vector<cursor> _cursors{};
         std::deque<line> _lines{};
@@ -336,9 +355,13 @@ namespace ImEdit {
         unsigned int _selected_breakpoint_line{0};
 
         mutable bool _should_call_pmc{true}; // if public function call and this is true, set to false, call _public_methods_callback, and re-set to true before function exit
+        bool _should_create_records{true}; // set to false when within undo/redo
 
         std::vector<region> _regex_results{};
         unsigned int _regex_results_index{};
+
+        std::list<record> _undo_record{};
+        std::list<record>::iterator _undo_record_it{_undo_record.end()};
     };
 }
 
