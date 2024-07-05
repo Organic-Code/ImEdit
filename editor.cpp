@@ -449,8 +449,8 @@ void ImEdit::editor::render() {
                         unsigned int number_of_spaces = _tab_length - column % _tab_length;
                         float tab_length = space_length.x * static_cast<float>(number_of_spaces);
                         if (show_space) {
-                            auto line_height = ImGui::GetFontSize() / 10;
-                            auto line_y_pos = (space_length.y - line_height) / 2;
+                            auto line_height = ImGui::GetFontSize() / 20;
+                            auto line_y_pos = (ImGui::GetTextLineHeightWithSpacing() - line_height) / 2;
                             draw_list->AddLine(
                                     ImVec2(imgui_cursor.x + 2, imgui_cursor.y + line_y_pos),
                                     ImVec2(imgui_cursor.x + tab_length - 2, imgui_cursor.y + line_y_pos),
@@ -461,9 +461,11 @@ void ImEdit::editor::render() {
                         column += number_of_spaces;
                     } else {
                         if (show_space) {
+                            auto radius = ImGui::GetFontSize() / 20;
+                            auto pos_y_shift = (ImGui::GetTextLineHeightWithSpacing() - radius) / 2;
                             draw_list->AddCircleFilled(
-                                    ImVec2(imgui_cursor.x + space_length.x / 2, imgui_cursor.y + space_length.y / 2),
-                                    ImGui::GetFontSize() / 10,
+                                    ImVec2(imgui_cursor.x + space_length.x / 2, imgui_cursor.y + pos_y_shift),
+                                    radius,
                                     style.color
                             );
                         }
