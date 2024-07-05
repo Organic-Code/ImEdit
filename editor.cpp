@@ -1975,20 +1975,29 @@ void ImEdit::editor::delete_selections() {
             } else {
                 unsigned int deleted_token_count = end.token - beg.token - 1;
 
-                line.tokens[beg.token + 1].data.erase(0, end.char_index);
-                if (line.tokens[beg.token + 1].data.empty()) {
-                    ++deleted_token_count;
-                    line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
-                }
-
                 line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1),
                                   std::next(line.tokens.begin(), end.token));
                 if (beg.char_index == 0) {
                     ++deleted_token_count;
                     line.tokens.erase(std::next(line.tokens.begin(), beg.token));
+
+                    // deleting end token (may be a partial delete)
+                    line.tokens[beg.token].data.erase(0, end.char_index);
+                    if (line.tokens[beg.token].data.empty()) {
+                        ++deleted_token_count;
+                        line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
+                    }
                 } else {
                     line.tokens[beg.token].data.erase(beg.char_index);
+
+                    // deleting end token (may be a partial delete)
+                    line.tokens[beg.token + 1].data.erase(0, end.char_index);
+                    if (line.tokens[beg.token + 1].data.empty()) {
+                        ++deleted_token_count;
+                        line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
+                    }
                 }
+
 
 
                 for (unsigned int idx : cursor_needs_move) {
