@@ -367,9 +367,11 @@ void ImEdit::editor::render() {
 
         assert(!_cursors.empty());
         if (_cursors.back().coord.line == i) {
+            imgui_cursor.y -= (ImGui::GetTextLineHeightWithSpacing() - glyph_size().y) / 2;
             draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x,
                                                     imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
                                      _style.current_line_color);
+            imgui_cursor.y += (ImGui::GetTextLineHeightWithSpacing() - glyph_size().y) / 2;
         }
 
 
@@ -408,9 +410,11 @@ void ImEdit::editor::render() {
         imgui_cursor.x += 5;
 
         if (line.background) {
+            imgui_cursor.y -= (ImGui::GetTextLineHeightWithSpacing() - glyph_size().y) / 2;
             draw_list->AddRectFilled(imgui_cursor, {imgui_cursor.x + draw_region.x - extra_padding,
                                                     imgui_cursor.y + ImGui::GetTextLineHeightWithSpacing()},
                                      *line.background);
+            imgui_cursor.y += (ImGui::GetTextLineHeightWithSpacing() - glyph_size().y) / 2;
         }
 
         // drawing search results
@@ -578,6 +582,7 @@ void ImEdit::editor::render_region_line(region r, unsigned int current_line, ImV
     }
 
     auto draw_list = ImGui::GetWindowDrawList();
+    imgui_cursor.y -= (ImGui::GetTextLineHeightWithSpacing() - glyph_size().y) / 2;
 
     coordinates min, max;
     if (coordinates_lt(r.beg, r.end)) {
@@ -2608,7 +2613,7 @@ ImEdit::style ImEdit::editor::get_default_style() {
     s.cursor_color                               = ImColor(255, 255, 255, 255);
     s.background_color                           = ImColor( 43,  43,  43, 255);
     s.selection_color                            = ImColor( 33,  66, 131, 255);
-    s.selection_outline_color                    = ImColor( 44,  88, 175, 255);
+    s.selection_outline_color                    = s.selection_color;
     s.search_match_color                         = ImColor( 60,  89,  61, 255);
     s.search_match_outline_color                 = ImColor( 60, 112,  75, 255);
     s.line_number_color                          = ImColor(158, 160, 159, 255);
