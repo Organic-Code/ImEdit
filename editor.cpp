@@ -1975,6 +1975,12 @@ void ImEdit::editor::delete_selections() {
             } else {
                 unsigned int deleted_token_count = end.token - beg.token - 1;
 
+                line.tokens[beg.token + 1].data.erase(0, end.char_index);
+                if (line.tokens[beg.token + 1].data.empty()) {
+                    ++deleted_token_count;
+                    line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
+                }
+
                 line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1),
                                   std::next(line.tokens.begin(), end.token));
                 if (beg.char_index == 0) {
@@ -1983,11 +1989,7 @@ void ImEdit::editor::delete_selections() {
                 } else {
                     line.tokens[beg.token].data.erase(beg.char_index);
                 }
-                line.tokens[beg.token + 1].data.erase(0, end.char_index);
-                if (line.tokens[beg.token + 1].data.empty()) {
-                    ++deleted_token_count;
-                    line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
-                }
+
 
                 for (unsigned int idx : cursor_needs_move) {
                     if (_cursors[idx].coord.line == end.line) {
@@ -2007,7 +2009,7 @@ void ImEdit::editor::delete_selections() {
             {
                 auto &beg_line = _lines[beg.line];
                 if (!beg_line.tokens.empty()) {
-                    if (beg.token + 1 < beg_line.tokens.size() - 1) {
+                    if (beg.token + 1 < beg_line.tokens.size()) {
                         beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token + 1), beg_line.tokens.end());
                     }
                     if (beg.char_index == 0) {
