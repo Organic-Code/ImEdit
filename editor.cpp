@@ -1645,16 +1645,13 @@ void ImEdit::editor::handle_mouse_input() {
         mouse_coord.token = mouse_coord.char_index = 0;
     }
 
-    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left) && _last_frame_mouse_coords) {
+    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.1f) && _last_frame_mouse_coords && !_last_frame_mouse_coords->is_left) {
         coordinates coord = mouse_coord.as_default_coords();
 
         // left click dragging = update selection
         if (_selections.empty()) {
             _selections.emplace_back();
             coordinates previous_coord = _last_frame_mouse_coords->as_default_coords();
-            if (_last_frame_mouse_coords->is_left) {
-                previous_coord.token = previous_coord.char_index = 0;
-            }
             _selections.back().beg = previous_coord;
             _selections.back().end = coord;
         }
