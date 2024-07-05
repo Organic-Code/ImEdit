@@ -415,12 +415,12 @@ void ImEdit::editor::render() {
 
         // drawing search results
         for (region searched : _regex_results) {
-            render_region_line(searched, i, draw_region, imgui_cursor, _style.search_match_color);
+            render_region_line(searched, i, draw_region, imgui_cursor, _style.search_match_color, _style.search_match_outline_color);
         }
 
         // Drawing selected region
         for (region select: _selections) {
-            render_region_line(select, i, draw_region, imgui_cursor, _style.selection_color);
+            render_region_line(select, i, draw_region, imgui_cursor, _style.selection_color, _style.selection_outline_color);
         }
 
 
@@ -572,7 +572,7 @@ void ImEdit::editor::render() {
     }
 }
 
-void ImEdit::editor::render_region_line(region r, unsigned int current_line, ImVec2 draw_region, ImVec2 imgui_cursor, ImColor color) noexcept {
+void ImEdit::editor::render_region_line(region r, unsigned int current_line, ImVec2 draw_region, ImVec2 imgui_cursor, ImColor fill, ImColor outline) noexcept {
     if (coordinates_eq(r.beg, r.end)) {
         return;
     }
@@ -640,7 +640,8 @@ void ImEdit::editor::render_region_line(region r, unsigned int current_line, ImV
 
     if (select_draw_start) {
         assert(select_draw_end);
-        draw_list->AddRectFilled(*select_draw_start, *select_draw_end, color);
+        draw_list->AddRectFilled(*select_draw_start, *select_draw_end, fill);
+        draw_list->AddRect(*select_draw_start, *select_draw_end, outline);
     }
 }
 
@@ -2607,7 +2608,9 @@ ImEdit::style ImEdit::editor::get_default_style() {
     s.cursor_color                               = ImColor(255, 255, 255, 255);
     s.background_color                           = ImColor( 43,  43,  43, 255);
     s.selection_color                            = ImColor( 33,  66, 131, 255);
+    s.selection_outline_color                    = ImColor( 44,  88, 175, 255);
     s.search_match_color                         = ImColor( 60,  89,  61, 255);
+    s.search_match_outline_color                 = ImColor( 60, 112,  75, 255);
     s.line_number_color                          = ImColor(158, 160, 159, 255);
     s.line_number_separator_color                = ImColor( 55,  55,  55, 255);
     s.current_line_color                         = ImColor( 50,  50,  50, 255);

@@ -296,7 +296,7 @@ namespace ImEdit {
 
         float compute_extra_padding() const noexcept;
 
-        void render_region_line(region r, unsigned int current_line, ImVec2 draw_region, ImVec2 imgui_cursor, ImColor c) noexcept;
+        void render_region_line(region r, unsigned int current_line, ImVec2 draw_region, ImVec2 imgui_cursor, ImColor fill, ImColor outline) noexcept;
 
         // Input a char at a specific cursor coordinates
         void input_raw_char(char c, cursor& pos);
