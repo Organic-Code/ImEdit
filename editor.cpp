@@ -1625,8 +1625,9 @@ void ImEdit::editor::delete_glyph(coordinates co) {
             _longest_line_idx = co.line - 1;
         }
     }
-    else {
-    // Deleting a regular glyph
+    else { // Deleting a regular glyph
+
+        std::vector<cursor> cursors_copy = _cursors;
         bool token_deleted = false;
         std::vector<char> deleted_chars{};
 
@@ -1680,7 +1681,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
             find_longest_line();
         }
 
-        add_char_deletion_record(std::move(deleted_chars), co, token_deleted);
+        add_char_deletion_record(std::move(deleted_chars), co, token_deleted, cursors_copy);
     }
 }
 
@@ -1975,9 +1976,13 @@ ImEdit::simple_coord ImEdit::editor::to_simple_coords(coordinates co) const noex
 }
 
 std::vector<ImEdit::simple_coord> ImEdit::editor::cursors_as_simple() const {
+    return cursors_as_simple(_cursors);
+}
+
+std::vector<ImEdit::simple_coord> ImEdit::editor::cursors_as_simple(const std::vector<cursor>& cursors) const {
     std::vector<simple_coord> vals;
-    vals.reserve(_cursors.size());
-    for (const cursor& c : _cursors) {
+    vals.reserve(cursors.size());
+    for (const cursor& c : cursors) {
         vals.emplace_back(to_simple_coords(c.coord));
     }
     return vals;
@@ -2804,7 +2809,7 @@ void ImEdit::editor::add_cursor_undo_record() {
     commit_record({cp});
 }
 
-void ImEdit::editor::add_char_deletion_record(std::vector<char> deleted_chars, coordinates coord, bool token_deleted) {
+void ImEdit::editor::add_char_deletion_record(std::vector<char> deleted_chars, coordinates coord, bool token_deleted, const std::vector<cursor>& cursors_location) {
     if (!_should_create_records) {
         return;
     }
@@ -2837,7 +2842,7 @@ void ImEdit::editor::add_char_deletion_record(std::vector<char> deleted_chars, c
         record::chars_deletion del;
         del.deleted_chars.emplace_back(std::move(deleted_chars));
         del.delete_location.emplace_back(to_simple_coords(coord));
-        del.cursors_coords = cursors_as_simple();
+        del.cursors_coords = cursors_as_simple(cursors_location);
         commit_record({del});
     }
 

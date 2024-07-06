@@ -282,6 +282,7 @@ namespace ImEdit {
 
         [[nodiscard]] simple_coord to_simple_coords(coordinates) const noexcept;
         [[nodiscard]] std::vector<simple_coord> cursors_as_simple() const;
+        [[nodiscard]] std::vector<simple_coord> cursors_as_simple(const std::vector<cursor>& cursors) const;
         [[nodiscard]] std::vector<simple_region> selections_as_simple() const;
         [[nodiscard]] coordinates from_simple_coords(simple_coord) const noexcept;
         [[nodiscard]] static coordinates from_simple_coords_within(simple_coord, const line&) noexcept;
@@ -320,7 +321,7 @@ namespace ImEdit {
         void show_breakpoint_window();
 
         void add_cursor_undo_record();
-        void add_char_deletion_record(std::vector<char>, coordinates, bool deleted_token);
+        void add_char_deletion_record(std::vector<char>, coordinates, bool deleted_token, const std::vector<cursor>& cursors_location);
         void add_char_addition_record(std::vector<char>, coordinates);
         void add_line_addition_record(coordinates);
         void add_line_deletion_record(coordinates);
