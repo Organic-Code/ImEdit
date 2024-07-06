@@ -2801,8 +2801,7 @@ void ImEdit::editor::add_cursor_undo_record() {
     cp.positions = cursors_as_simple();
     cp.selections = selections_as_simple();
 
-    _undo_record.push_back({cp});
-    _undo_record_it = _undo_record.end();
+    commit_record({cp});
 }
 
 void ImEdit::editor::add_char_deletion_record(std::vector<char> deleted_chars, coordinates coord, bool token_deleted) {
@@ -2831,17 +2830,17 @@ void ImEdit::editor::add_char_deletion_record(std::vector<char> deleted_chars, c
                 val.delete_location.emplace_back(to_simple_coords(coord));
             }
         }, _undo_record_it->value);
+        _cursor_moved_by_action_since_last_record = false;
+        _undo_record_it = _undo_record.end();
     }
     else {
         record::chars_deletion del;
         del.deleted_chars.emplace_back(std::move(deleted_chars));
         del.delete_location.emplace_back(to_simple_coords(coord));
         del.cursors_coords = cursors_as_simple();
-        _undo_record.push_back({del});
+        commit_record({del});
     }
 
-    _cursor_moved_by_action_since_last_record = false;
-    _undo_record_it = _undo_record.end();
 }
 
 void ImEdit::editor::add_char_addition_record(std::vector<char> new_chars, coordinates coord) {
@@ -2870,18 +2869,18 @@ void ImEdit::editor::add_char_addition_record(std::vector<char> new_chars, coord
                 val.add_location.emplace_back(to_simple_coords(coord));
             }
         }, _undo_record_it->value);
+        _undo_record_it = _undo_record.end();
+        _cursor_moved_by_action_since_last_record = false;
     }
     else {
         record::chars_addition add;
         add.added_chars.emplace_back(std::move(new_chars));
         add.add_location.emplace_back(to_simple_coords(coord));
         add.cursors_coords = cursors_as_simple();
-        _undo_record.push_back({add});
+        commit_record({add});
     }
 
-    _undo_record_it = _undo_record.end();
 
-    _cursor_moved_by_action_since_last_record = false;
 }
 
 void ImEdit::editor::add_line_addition_record(coordinates co) {
@@ -2896,8 +2895,7 @@ void ImEdit::editor::add_line_addition_record(coordinates co) {
     nl.new_line_location = to_simple_coords(co);
     nl.cursors_coords = cursors_as_simple();
 
-    _undo_record.push_back({nl});
-    _undo_record_it = _undo_record.end();
+    commit_record({nl});
 }
 
 void ImEdit::editor::add_line_deletion_record(coordinates co) {
@@ -2912,8 +2910,7 @@ void ImEdit::editor::add_line_deletion_record(coordinates co) {
     nl.line_deletion_location = to_simple_coords(co);
     nl.cursors_coords = cursors_as_simple();
 
-    _undo_record.push_back({nl});
-    _undo_record_it = _undo_record.end();
+    commit_record({nl});
 }
 
 void ImEdit::editor::add_selection_deletion_record(std::vector<line> deleted_selections, region r) {
@@ -2929,8 +2926,7 @@ void ImEdit::editor::add_selection_deletion_record(std::vector<line> deleted_sel
     sdr.selection_location = {to_simple_coords(r.beg), to_simple_coords(r.end)};
     sdr.cursors_coords = cursors_as_simple();
 
-    _undo_record.push_back({sdr});
-    _undo_record_it = _undo_record.end();
+    commit_record({sdr});
 }
 
 void ImEdit::editor::add_paste_record(const std::vector<coordinates>& coords, std::string data) {
@@ -2949,8 +2945,16 @@ void ImEdit::editor::add_paste_record(const std::vector<coordinates>& coords, st
     p.data = std::move(data);
     p.cursors_coords = cursors_as_simple();
 
-    _undo_record.push_back({p});
+    commit_record({p});
+}
+
+void ImEdit::editor::commit_record(ImEdit::record r) {
+    _undo_record.push_back(std::move(r));
+    if (_undo_record.size() > _undo_history_size) {
+        _undo_record.erase(_undo_record.begin());
+    }
     _undo_record_it = _undo_record.end();
+    _cursor_moved_by_action_since_last_record = false;
 }
 
 void ImEdit::editor::reset_current_tooltip() {

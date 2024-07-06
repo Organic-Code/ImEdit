@@ -154,6 +154,7 @@ namespace ImEdit {
         void add_selection(region r) noexcept;
         void delete_selections(); // delete the contents of every selection
 
+        // See _undo_history_size
         void undo();
         void redo();
 
@@ -246,6 +247,7 @@ namespace ImEdit {
 
         bool _always_show_cursors{false}; // By default, cursor is hidden when editor isn’t focused.
 
+        size_t _undo_history_size{200};
 
     /*************************************************************************************
      *
@@ -324,6 +326,7 @@ namespace ImEdit {
         void add_line_deletion_record(coordinates);
         void add_selection_deletion_record(std::vector<line>, region);
         void add_paste_record(const std::vector<coordinates>& coord, std::string data);
+        void commit_record(record r);
 
         std::vector<cursor> _cursors{};
         std::deque<line> _lines{};
