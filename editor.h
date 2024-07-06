@@ -281,6 +281,7 @@ namespace ImEdit {
         [[nodiscard]] std::vector<simple_coord> cursors_as_simple() const;
         [[nodiscard]] std::vector<simple_region> selections_as_simple() const;
         [[nodiscard]] coordinates from_simple_coords(simple_coord) const noexcept;
+        [[nodiscard]] static coordinates from_simple_coords_within(simple_coord, const line&) noexcept;
         [[nodiscard]] std::vector<cursor> cursors_from_simple(const std::vector<simple_coord>&) const;
         [[nodiscard]] std::vector<region> selections_from_simple(const std::vector<simple_region>&) const;
 

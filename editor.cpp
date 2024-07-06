@@ -458,7 +458,7 @@ void ImEdit::editor::render() {
                         }
                         imgui_cursor.x += tab_length;
                         column += number_of_spaces;
-                    } else {
+                    } else if (std::isspace(c)) {
                         if (show_space) {
                             auto radius = ImGui::GetFontSize() / 20;
                             auto pos_y_shift = (ImGui::GetTextLineHeightWithSpacing() - radius) / 2;
@@ -468,6 +468,12 @@ void ImEdit::editor::render() {
                                     style.color
                             );
                         }
+                        imgui_cursor.x += space_length.x;
+                        ++column;
+                    } else {
+                        std::string str;
+                        str = c;
+                        draw_list->AddText(imgui_cursor, style.color, str.data(), str.data() + str.size());
                         imgui_cursor.x += space_length.x;
                         ++column;
                     }
@@ -1988,7 +1994,10 @@ std::vector<ImEdit::simple_region> ImEdit::editor::selections_as_simple() const 
 
 ImEdit::coordinates ImEdit::editor::from_simple_coords(simple_coord co) const noexcept {
     assert(co.line < _lines.size());
+    return from_simple_coords_within(co, _lines[co.line]);
+}
 
+ImEdit::coordinates ImEdit::editor::from_simple_coords_within(simple_coord co, const line& line) noexcept {
     coordinates value;
     value.line = co.line;
     // dealing with empty lines
@@ -1997,14 +2006,13 @@ ImEdit::coordinates ImEdit::editor::from_simple_coords(simple_coord co) const no
         return value;
     }
 
-    unsigned int token = 0;
-    while (co.char_index > _lines[co.line].tokens[token].data.size()) {
-        co.char_index -= _lines[co.line].tokens[token].data.size();
-        ++token;
-        assert(token < _lines[co.line].tokens.size());
-    }
-    value.token = token;
+    value.token = 0;
     value.char_index = co.char_index;
+    while (value.char_index > line.tokens[value.token].data.size()) {
+        value.char_index -= line.tokens[value.token].data.size();
+        ++value.token;
+        assert(value.token < line.tokens.size());
+    }
     return value;
 }
 
@@ -2194,9 +2202,12 @@ void ImEdit::editor::delete_selections() {
 
             for (unsigned int idx : cursor_needs_move) {
                 if (_cursors[idx].coord.line == end.line) {
+                    if (_cursors[idx].coord.token == end.token) {
+                        _cursors[idx].coord.char_index -= end.char_index;
+                    }
+                    _cursors[idx].coord.token -= extra_token_deleted;
                     _cursors[idx].coord.token += beg.token + 1;
                     _cursors[idx].coord.token -= end.token;
-                    _cursors[idx].coord.token -= extra_token_deleted;
                 }
                 _cursors[idx].coord.line -= (end.line - beg.line);
             }
@@ -2227,6 +2238,7 @@ void ImEdit::editor::undo() {
             _selections = selections_from_simple(val.selections);
         }
         else if constexpr (std::is_same_v<T, record::chars_deletion>) {
+
             assert(val.deleted_chars.size() == val.delete_location.size());
             for (unsigned int i = val.deleted_chars.size() ; i-- != 0 ;) {
                 coordinates loc = from_simple_coords(val.delete_location[i]);
@@ -2235,8 +2247,10 @@ void ImEdit::editor::undo() {
                 for (char c: val.deleted_chars[i]) {
                     input_raw_char(c);
                 }
+                _cursors.back().wanted_column = column_count_to(_cursors.back().coord);
             }
-            _cursors = cursors_from_simple(val.cursors_coords); // FIXME wrong location
+
+            _cursors = cursors_from_simple(val.cursors_coords);
         }
         else if constexpr (std::is_same_v<T, record::chars_addition>) {
             assert(val.added_chars.size() == val.add_location.size());
@@ -2273,15 +2287,16 @@ void ImEdit::editor::undo() {
                 if (loc.beg.char_index > loc.end.char_index) {
                     std::swap(loc.beg.char_index, loc.end.char_index);
                 }
-                coordinates beg = from_simple_coords(loc.beg);
+                coordinates beg_within_global = from_simple_coords(loc.beg);
+                coordinates beg_within_deleted = from_simple_coords_within(loc.beg, val.deleted_selections.front());
 
                 // .beg coordinates are valid for _lines. .end coordinates are not (but they are valid for val.deleted_selections)
                 unsigned int char_idx_min = std::min(loc.beg.char_index, loc.end.char_index);
                 unsigned int char_idx_max = std::max(loc.beg.char_index, loc.end.char_index);
 
                 unsigned int char_count = char_idx_max - char_idx_min;
-                unsigned int current_token = beg.token;
-                unsigned int current_idx = beg.char_index;
+                unsigned int current_token = beg_within_deleted.token;
+                unsigned int current_idx = beg_within_deleted.char_index;
 
                 std::string char_to_be_added;
                 char_to_be_added.reserve(char_count);
@@ -2306,8 +2321,8 @@ void ImEdit::editor::undo() {
 
                     --char_count;
                 }
-                auto& str = _lines[beg.line].tokens[beg.token].data;
-                str = str.substr(0, beg.char_index) + char_to_be_added + str.substr(beg.char_index);
+                auto& str = _lines[beg_within_global.line].tokens[beg_within_global.token].data;
+                str = str.substr(0, beg_within_global.char_index) + char_to_be_added + str.substr(beg_within_global.char_index);
 
             } else {
                 coordinates beg, end;
@@ -2796,6 +2811,7 @@ void ImEdit::editor::add_char_deletion_record(std::vector<char> deleted_chars, c
     }
     if (_undo_record_it != _undo_record.end()) {
         _undo_record.erase(_undo_record_it, _undo_record.end());
+        _undo_record_it = _undo_record.end();
     }
 
     bool last_was_char_deletion{false};
