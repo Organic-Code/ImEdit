@@ -1676,9 +1676,6 @@ void ImEdit::editor::delete_glyph(coordinates co) {
 
         add_char_deletion_record(std::move(deleted_chars), co, token_deleted);
     }
-
-    sanitize_cursors();
-
 }
 
 void ImEdit::editor::handle_mouse_input() {
@@ -1713,6 +1710,7 @@ void ImEdit::editor::handle_mouse_input() {
 
         _cursors.clear();
         _cursors.push_back({coord, column_count_to(coord)});
+        sanitize_selections();
     }
 
     ImGuiIO &im_io = ImGui::GetIO();
@@ -2687,6 +2685,7 @@ void ImEdit::editor::input_delete() {
                 delete_glyph(move_coordinates_right(cursor.coord));
             }
         }
+        sanitize_cursors();
     }
 
     IMEDIT_RESTORE_PMC
@@ -2702,6 +2701,7 @@ void ImEdit::editor::input_backspace() {
         for (cursor &cursor: _cursors) {
             delete_glyph(cursor.coord);
         }
+        sanitize_cursors();
     }
 
     IMEDIT_RESTORE_PMC
