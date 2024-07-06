@@ -186,9 +186,8 @@ namespace ImEdit {
 
         // char deletion
         struct chars_deletion {
-            std::vector<char> deleted_chars;
-            simple_coord delete_location;
-            bool token_deleted;
+            std::vector<std::vector<char>> deleted_chars;
+            std::vector<simple_coord> delete_location;
 
             std::vector<simple_coord> cursors_coords;
         };

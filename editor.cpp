@@ -663,7 +663,7 @@ ImEdit::editor::editor(std::string id) :
 void ImEdit::editor::move_cursors_up() {
     IMEDIT_CALL_PMC(move_cursors_up)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_up(cursor.coord, cursor.wanted_column);
@@ -678,7 +678,7 @@ void ImEdit::editor::move_cursors_up() {
 void ImEdit::editor::move_cursors_down() {
     IMEDIT_CALL_PMC(move_cursors_down)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_down(cursor.coord, cursor.wanted_column);
@@ -691,7 +691,7 @@ void ImEdit::editor::move_cursors_down() {
 void ImEdit::editor::move_cursors_left() {
     IMEDIT_CALL_PMC(move_cursors_left)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_left(cursor.coord);
@@ -705,7 +705,7 @@ void ImEdit::editor::move_cursors_left() {
 void ImEdit::editor::move_cursors_right() {
     IMEDIT_CALL_PMC(move_cursors_right)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_right(cursor.coord);
@@ -744,7 +744,7 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_down(coordinates coord, uns
 void ImEdit::editor::move_cursors_left_token() {
     IMEDIT_CALL_PMC(move_cursors_left_token)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_left_token(cursor.coord);
@@ -760,7 +760,7 @@ void ImEdit::editor::move_cursors_left_token() {
 void ImEdit::editor::move_cursors_right_token() {
     IMEDIT_CALL_PMC(move_cursors_right_token)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_right_token(cursor.coord);
@@ -775,7 +775,7 @@ void ImEdit::editor::move_cursors_right_token() {
 void ImEdit::editor::move_cursors_to_beg() {
     IMEDIT_CALL_PMC(move_cursors_to_beg)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_begline(cursor.coord);
@@ -790,7 +790,7 @@ void ImEdit::editor::move_cursors_to_beg() {
 void ImEdit::editor::move_cursors_to_end() {
     IMEDIT_CALL_PMC(move_cursors_to_end)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     for (auto& cursor : _cursors) {
         cursor.coord = move_coordinates_endline(cursor.coord);
@@ -805,7 +805,7 @@ void ImEdit::editor::move_cursors_to_end() {
 void ImEdit::editor::move_cursors_to_endfile() {
     IMEDIT_CALL_PMC(move_cursors_to_endfile)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     _cursors.clear();
     _selections.clear();
@@ -829,7 +829,7 @@ void ImEdit::editor::move_cursors_to_endfile() {
 void ImEdit::editor::move_cursors_to_begfile() {
     IMEDIT_CALL_PMC(move_cursors_to_begfile)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     clear_search();
     _cursors.clear();
     _selections.clear();
@@ -970,7 +970,7 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_begline(coordinates co) con
 void ImEdit::editor::selection_toggle_right() {
     IMEDIT_CALL_PMC(selection_toggle_right)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     for (cursor& c : _cursors) {
         auto begin = c.coord;
         auto end = move_coordinates_right(c.coord);
@@ -987,7 +987,7 @@ void ImEdit::editor::selection_toggle_right() {
 void ImEdit::editor::selection_toggle_left() {
     IMEDIT_CALL_PMC(selection_toggle_left)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     for (cursor& c : _cursors) {
         auto begin = move_coordinates_left(c.coord);
         auto end = c.coord;
@@ -1004,7 +1004,7 @@ void ImEdit::editor::selection_toggle_left() {
 void ImEdit::editor::selection_toggle_right_token() {
     IMEDIT_CALL_PMC(selection_toggle_right_token)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     for (cursor& c : _cursors) {
         auto begin = c.coord;
         auto end = move_coordinates_right_token(c.coord);
@@ -1021,7 +1021,7 @@ void ImEdit::editor::selection_toggle_right_token() {
 void ImEdit::editor::selection_toggle_left_token() {
     IMEDIT_CALL_PMC(selection_toggle_left_token)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     for (cursor& c : _cursors) {
         auto begin = move_coordinates_left_token(c.coord);
         auto end = c.coord;
@@ -1038,7 +1038,7 @@ void ImEdit::editor::selection_toggle_left_token() {
 void ImEdit::editor::selection_toggle_up() {
     IMEDIT_CALL_PMC(selection_toggle_up)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     for (cursor& c : _cursors) {
         auto begin = move_coordinates_up(c.coord, c.wanted_column);
         auto end = c.coord;
@@ -1054,7 +1054,7 @@ void ImEdit::editor::selection_toggle_up() {
 void ImEdit::editor::selection_toggle_down() {
     IMEDIT_CALL_PMC(selection_toggle_down)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     for (cursor& c : _cursors) {
         auto begin = c.coord;
         auto end = move_coordinates_down(c.coord, c.wanted_column);
@@ -1070,7 +1070,7 @@ void ImEdit::editor::selection_toggle_down() {
 void ImEdit::editor::selection_begline() {
     IMEDIT_CALL_PMC(selection_begline)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     for (cursor& c : _cursors) {
         auto begin = move_coordinates_begline(c.coord);
         auto end = c.coord;
@@ -1087,7 +1087,7 @@ void ImEdit::editor::selection_begline() {
 void ImEdit::editor::selection_endline() {
     IMEDIT_CALL_PMC(selection_endline)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     for (cursor& c : _cursors) {
         auto begin = c.coord;
         auto end = move_coordinates_endline(c.coord);
@@ -1104,7 +1104,7 @@ void ImEdit::editor::selection_endline() {
 void ImEdit::editor::selection_begfile() {
     IMEDIT_CALL_PMC(selection_begfile)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     coordinates max = {0,0,0};
     for (const cursor& c : _cursors) {
         if (coordinates_lt(max, c.coord)) {
@@ -1122,7 +1122,7 @@ void ImEdit::editor::selection_begfile() {
 void ImEdit::editor::selection_endfile() {
     IMEDIT_CALL_PMC(selection_endfile)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     coordinates end_coord;
     if (!_lines.empty()) {
         if (_lines.back().tokens.empty()) {
@@ -1698,7 +1698,7 @@ void ImEdit::editor::handle_mouse_input() {
 
     if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.1f) && _last_frame_mouse_coords && !_last_frame_mouse_coords->is_left) {
         coordinates coord = mouse_coord.as_default_coords();
-        _cursor_moved_by_action_since_last_ca_record = true;
+        _cursor_moved_by_action_since_last_record = true;
 
         // left click dragging = update selection
         if (_selections.empty()) {
@@ -1723,7 +1723,7 @@ void ImEdit::editor::handle_mouse_input() {
 
     if (ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
         _showing_breakpoint_window = false;
-        _cursor_moved_by_action_since_last_ca_record = true;
+        _cursor_moved_by_action_since_last_record = true;
 
         if (!mouse_coord.is_left) {
             coordinates coord = mouse_coord.as_default_coords();
@@ -1757,7 +1757,7 @@ void ImEdit::editor::handle_mouse_input() {
         }
     }
     else if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        _cursor_moved_by_action_since_last_ca_record = true;
+        _cursor_moved_by_action_since_last_record = true;
         _showing_breakpoint_window = false;
 
         if (is_mouse_in_breakpoint_column()) {
@@ -1927,7 +1927,7 @@ ImVec2 ImEdit::editor::glyph_size() const noexcept {
 void ImEdit::editor::add_selection(region r) noexcept {
     IMEDIT_CALL_PMC_CAPT(add_selection, r)
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     add_cursor_undo_record();
     _cursors.push_back({r.end, column_count_to(r.end)});
     if (coordinates_lt(r.end, r.beg)) {
@@ -2062,7 +2062,7 @@ void ImEdit::editor::delete_selections() {
 
     // FIXME buggy
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     // Deleting last selection first so that we don’t have to move a bunch of coordinates.
     std::vector<region> sorted_selections = _selections;
     std::sort(sorted_selections.begin(), sorted_selections.end(), [this](const region& r1, const region& r2) {
@@ -2222,29 +2222,26 @@ void ImEdit::editor::undo() {
     _should_create_records = false;
 
     --_undo_record_it;
-    std::visit([this](auto& val){
+    std::visit([this](const auto& val){
         using T = std::decay_t<decltype(val)>;
         if constexpr (std::is_same_v<T, record::cursor_position>) {
             _cursors = cursors_from_simple(val.positions);
             _selections = selections_from_simple(val.selections);
         }
         else if constexpr (std::is_same_v<T, record::chars_deletion>) {
-            coordinates loc = from_simple_coords(val.delete_location);
-            _cursors.clear();
-            _cursors.push_back({loc, 0});
-            for (char c : val.deleted_chars) {
-                input_raw_char(c);
-            }
-            _cursors = cursors_from_simple(val.cursors_coords);
-            for (cursor& c : _cursors) {
-                if (coordinates_eq(c.coord, loc)) {
-                    c.coord = move_coordinates_right(c.coord);
-                    c.wanted_column = column_count_to(c.coord);
-                    break;
+            assert(val.deleted_chars.size() == val.delete_location.size());
+            for (unsigned int i = val.deleted_chars.size() ; i-- != 0 ;) {
+                coordinates loc = from_simple_coords(val.delete_location[i]);
+                _cursors.clear();
+                _cursors.push_back({loc, 0});
+                for (char c: val.deleted_chars[i]) {
+                    input_raw_char(c);
                 }
             }
+            _cursors = cursors_from_simple(val.cursors_coords); // FIXME wrong location
         }
         else if constexpr (std::is_same_v<T, record::chars_addition>) {
+            assert(val.added_chars.size() == val.add_location.size());
             for (unsigned int i = val.add_location.size() ; i-- != 0 ;) {
                 coordinates loc = move_coordinates_right(from_simple_coords(val.add_location[i]));
                 _cursors.clear();
@@ -2274,14 +2271,15 @@ void ImEdit::editor::undo() {
             if (val.selection_location.beg.line == val.selection_location.end.line) {
                 assert(val.deleted_selections.size() == 1);
 
-                if (val.selection_location.beg.char_index > val.selection_location.end.char_index) {
-                    std::swap(val.selection_location.beg.char_index, val.selection_location.end.char_index);
+                simple_region loc = val.selection_location;
+                if (loc.beg.char_index > loc.end.char_index) {
+                    std::swap(loc.beg.char_index, loc.end.char_index);
                 }
-                coordinates beg = from_simple_coords(val.selection_location.beg);
+                coordinates beg = from_simple_coords(loc.beg);
 
                 // .beg coordinates are valid for _lines. .end coordinates are not (but they are valid for val.deleted_selections)
-                unsigned int char_idx_min = std::min(val.selection_location.beg.char_index, val.selection_location.end.char_index);
-                unsigned int char_idx_max = std::max(val.selection_location.beg.char_index, val.selection_location.end.char_index);
+                unsigned int char_idx_min = std::min(loc.beg.char_index, loc.end.char_index);
+                unsigned int char_idx_max = std::max(loc.beg.char_index, loc.end.char_index);
 
                 unsigned int char_count = char_idx_max - char_idx_min;
                 unsigned int current_token = beg.token;
@@ -2361,7 +2359,7 @@ void ImEdit::editor::undo() {
                 }
 
                 std::deque<token>& end_tokens = _lines.insert(std::next(_lines.begin(), end.line), line{})->tokens;
-                std::deque<token>& deleted_tokens = val.deleted_selections.back().tokens;
+                const std::deque<token>& deleted_tokens = val.deleted_selections.back().tokens;
 
                 end_tokens.emplace_back();
                 for (unsigned int i = 0; i < end.token; ++i) {
@@ -2379,10 +2377,6 @@ void ImEdit::editor::undo() {
 
         }
         else if constexpr (std::is_same_v<T, record::paste>) {
-            std::sort(val.cursors_coords.begin(), val.cursors_coords.end(), [](const simple_coord& c1, const simple_coord& c2) {
-                return c1.line < c2.line || c1.line == c2.line && c1.char_index < c2.char_index;
-            });
-
             auto nb_lines = std::count(val.data.begin(), val.data.end(), '\n') + 1;
             std::vector<region> regions;
 
@@ -2414,11 +2408,9 @@ void ImEdit::editor::undo() {
         }
         else {
             static_assert(std::is_same_v<T, std::monostate>, "missing branches for undo");
-            assert(false && "Reached empty undo");
+            assert(false && "Reached empty undo record");
         }
-
-
-        }, _undo_record_it->value);
+    }, _undo_record_it->value);
 
     _should_create_records = original_record_status;
     IMEDIT_RESTORE_PMC
@@ -2460,7 +2452,7 @@ bool ImEdit::editor::select_next() {
         return false;
     }
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     if (_regex_results_index == _regex_results.size()) {
         _regex_results_index = 0;
     }
@@ -2482,7 +2474,7 @@ bool ImEdit::editor::select_previous() {
         return false;
     }
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     if (_regex_results_index == 0) {
         _regex_results_index = _regex_results.size();
     }
@@ -2506,7 +2498,7 @@ void ImEdit::editor::select_all() {
         return;
     }
 
-    _cursor_moved_by_action_since_last_ca_record = true;
+    _cursor_moved_by_action_since_last_record = true;
     _selections.clear();
     _cursors.clear();
     for (region r : _regex_results) {
@@ -2806,13 +2798,33 @@ void ImEdit::editor::add_char_deletion_record(std::vector<char> deleted_chars, c
         _undo_record.erase(_undo_record_it, _undo_record.end());
     }
 
-    record::chars_deletion del;
-    del.deleted_chars = std::move(deleted_chars);
-    del.delete_location = to_simple_coords(coord);
-    del.token_deleted = token_deleted;
-    del.cursors_coords = cursors_as_simple();
+    bool last_was_char_deletion{false};
+    if (!_undo_record.empty()) {
+        --_undo_record_it;
+        std::visit([&last_was_char_deletion](const auto &val) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(val)>, record::chars_deletion>) {
+                last_was_char_deletion = true;
+            }
+        }, _undo_record_it->value);
+    }
 
-    _undo_record.push_back({del});
+    if (last_was_char_deletion && !_cursor_moved_by_action_since_last_record) {
+        std::visit([&deleted_chars, &coord, this](auto& val) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(val)>, record::chars_deletion>) {
+                val.deleted_chars.emplace_back(std::move(deleted_chars));
+                val.delete_location.emplace_back(to_simple_coords(coord));
+            }
+        }, _undo_record_it->value);
+    }
+    else {
+        record::chars_deletion del;
+        del.deleted_chars.emplace_back(std::move(deleted_chars));
+        del.delete_location.emplace_back(to_simple_coords(coord));
+        del.cursors_coords = cursors_as_simple();
+        _undo_record.push_back({del});
+    }
+
+    _cursor_moved_by_action_since_last_record = false;
     _undo_record_it = _undo_record.end();
 }
 
@@ -2835,7 +2847,7 @@ void ImEdit::editor::add_char_addition_record(std::vector<char> new_chars, coord
         }, _undo_record_it->value);
     }
 
-    if (last_was_char_addition && !_cursor_moved_by_action_since_last_ca_record) {
+    if (last_was_char_addition && !_cursor_moved_by_action_since_last_record) {
         std::visit([&new_chars, &coord, this](auto& val) {
             if constexpr (std::is_same_v<std::decay_t<decltype(val)>, record::chars_addition>) {
                 val.added_chars.emplace_back(std::move(new_chars));
@@ -2853,7 +2865,7 @@ void ImEdit::editor::add_char_addition_record(std::vector<char> new_chars, coord
 
     _undo_record_it = _undo_record.end();
 
-    _cursor_moved_by_action_since_last_ca_record = false;
+    _cursor_moved_by_action_since_last_record = false;
 }
 
 void ImEdit::editor::add_line_addition_record(coordinates co) {

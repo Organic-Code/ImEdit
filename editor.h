@@ -356,7 +356,7 @@ namespace ImEdit {
 
         mutable bool _should_call_pmc{true}; // if public function call and this is true, set to false, call _public_methods_callback, and re-set to true before function exit
         bool _should_create_records{true}; // set to false when within undo/redo
-        bool _cursor_moved_by_action_since_last_ca_record{false}; // set to true when cursor is moved by mouse, arrow moves, or others. Set to false by add_char_addition_record
+        bool _cursor_moved_by_action_since_last_record{false}; // set to true when cursor is moved by mouse, arrow moves, or others. Set to false by some add_*_record methods
 
         std::vector<region> _regex_results{};
         unsigned int _regex_results_index{};
