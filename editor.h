@@ -36,6 +36,7 @@
 #include <chrono>
 #include <regex>
 #include <list>
+#include <any>
 
 #if __has_include(<imgui.h>)
 #include <imgui.h>
@@ -123,7 +124,7 @@ namespace ImEdit {
         void clear();
 
         // editor._shortcuts_data can be set, and will be passed as parameter to this callback
-        void add_shortcut(input in, std::function<void(void* shortcuts_data, editor& this_editor)> callback);
+        void add_shortcut(input in, std::function<void(std::any shortcuts_data, editor& this_editor)> callback);
         void add_shortcut(input in, void(editor::*member_function)());
         void add_shortcut(input in, void(editor::*const_member_function)() const);
         void clear_shortcuts() { _shortcuts.clear(); }
@@ -136,7 +137,7 @@ namespace ImEdit {
         void reset_current_tooltip();
 
 
-        static std::vector<std::pair<input, std::function<void(void*, editor&)>>> get_default_shortcuts();
+        static std::vector<std::pair<input, std::function<void(std::any, editor&)>>> get_default_shortcuts();
         static style get_default_style(); // similar to monokai
 
         // checks if there is a current regex match (see editor::regex_search)
@@ -227,21 +228,21 @@ namespace ImEdit {
         // When matching token is hovered and _tooltips[token] exists, calls ImGui::BeginTooltip,
         // and either prints the variant’s string, or calls the std::function so that you can draw whatever you wish in the tooltip.
         // Callback is called with _tooltip_data as its first parameter.
-        using tooltip_callback = std::function<void(void* tooltip_data, const token&)>;
+        using tooltip_callback = std::function<void(std::any tooltip_data, const token&)>;
         std::unordered_map<token, std::variant<std::string, tooltip_callback>, token_hash> _tooltips; // when modifying this, remember to call editor::reset_current_tooltip
-        void* _tooltip_data{nullptr}; // Passed to tooltip callbacks as user data
+        std::any _tooltip_data{nullptr}; // Passed to tooltip callbacks as user data
         std::chrono::milliseconds _tooltip_delay{std::chrono::seconds(1)}; // Delay before the tooltip appears
         std::chrono::milliseconds _tooltip_grace_period{std::chrono::milliseconds(250)}; // Delay for which the tooltip stays up, even after the mouse went away
 
-        void* _shortcuts_data{nullptr}; // Passed to shortcut callbacks as user data (see editor::add_shortcut)
+        std::any _shortcuts_data{nullptr}; // Passed to shortcut callbacks as user data (see editor::add_shortcut)
 
-        std::function<void(void* data, std::function<void()>)> _public_methods_callback{}; // TODO explain this. Mention editor::_allow_mouse_input
-        void* _public_methods_callback_data{nullptr};
+        std::function<void(std::any data, std::function<void()>)> _public_methods_callback{}; // TODO explain this. Mention editor::_allow_mouse_input
+        std::any _public_methods_callback_data{nullptr};
 
         // data is filled by _breakpoint_data
-        std::function<void(void* data, unsigned int line_number, editor& this_editor)> _breakpoint_window_filler{}; // This function is called to fill the breakpoint tooltip. The tooltip is a regular ImGui window
-        std::function<void(void* data, unsigned int line_number, editor& this_editor)> _breakpoint_toggled{}; // called whenever a breakpoint is added or removed. If empty, breakpoints can’t be added or removed via a click anymore
-        void* _breakpoint_data{nullptr};
+        std::function<void(std::any data, unsigned int line_number, editor& this_editor)> _breakpoint_window_filler{}; // This function is called to fill the breakpoint tooltip. The tooltip is a regular ImGui window
+        std::function<void(std::any data, unsigned int line_number, editor& this_editor)> _breakpoint_toggled{}; // called whenever a breakpoint is added or removed. If empty, breakpoints can’t be added or removed via a click anymore
+        std::any _breakpoint_data{nullptr};
 
         bool _always_show_cursors{false}; // By default, cursor is hidden when editor isn’t focused.
 
@@ -343,7 +344,7 @@ namespace ImEdit {
         std::chrono::system_clock::time_point _tooltip_last_hovered_at{};
         bool _tooltip_has_focus{false};
 
-        std::vector<std::pair<input, std::function<void(void* shortcuts_data, editor& this_editor)>>> _shortcuts{};
+        std::vector<std::pair<input, std::function<void(std::any shortcuts_data, editor& this_editor)>>> _shortcuts{};
 
         mutable std::optional<ImVec2> _glyph_size{};
 

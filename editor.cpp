@@ -2750,7 +2750,7 @@ void ImEdit::editor::show_tooltip() {
                            using T = std::decay_t<decltype(arg)>;
                            if constexpr (std::is_same_v<T, std::string>) {
                                ImGui::Text("%s", arg.c_str());
-                           } else if constexpr (std::is_same_v<T, std::function<void(void *,
+                           } else if constexpr (std::is_same_v<T, std::function<void(std::any,
                                                                                      const ImEdit::token &)>>) {
                                arg(_tooltip_data, (*_tooltip)->first);
                            } else {
@@ -3115,28 +3115,28 @@ void ImEdit::editor::cut_to_clipboard() {
     IMEDIT_RESTORE_PMC
 }
 
-void ImEdit::editor::add_shortcut(input in, std::function<void(void *, editor &)> callback) {
+void ImEdit::editor::add_shortcut(input in, std::function<void(std::any, editor &)> callback) {
     _shortcuts.emplace_back(std::move(in), std::move(callback));
 }
 
 void ImEdit::editor::add_shortcut(input in, void (editor::*member_function)()) {
-    add_shortcut(std::move(in), [member_function](void*, editor& ed) {
+    add_shortcut(std::move(in), [member_function](std::any, editor& ed) {
                      (ed.*member_function)();
                  }
     );
 }
 
 void ImEdit::editor::add_shortcut(input in, void (editor::*member_function)() const) {
-    add_shortcut(std::move(in), [member_function](void*, editor& ed) {
+    add_shortcut(std::move(in), [member_function](std::any, editor& ed) {
                      (ed.*member_function)();
                  }
     );
 }
 
-std::vector<std::pair<ImEdit::input, std::function<void(void *, ImEdit::editor &)>>> ImEdit::editor::get_default_shortcuts() {
-    std::vector<std::pair<input, std::function<void(void *, editor &)>>> shortcuts;
+std::vector<std::pair<ImEdit::input, std::function<void(std::any, ImEdit::editor &)>>> ImEdit::editor::get_default_shortcuts() {
+    std::vector<std::pair<input, std::function<void(std::any, editor &)>>> shortcuts;
     auto add_memb_fn = [&shortcuts](input in, auto fn) {
-        shortcuts.emplace_back(std::move(in), [fn](void*, editor& ed) {
+        shortcuts.emplace_back(std::move(in), [fn](std::any, editor& ed) {
             (ed.*fn)();
         });
     };
@@ -3151,7 +3151,7 @@ std::vector<std::pair<ImEdit::input, std::function<void(void *, ImEdit::editor &
     add_memb_fn({{ImGuiKey_End}, input::modifiers::none}, &editor::move_cursors_to_end);
     add_memb_fn({{ImGuiKey_Home}, input::modifiers::none}, &editor::move_cursors_to_beg);
     add_memb_fn({{ImGuiKey_Escape}, input::modifiers::none}, &editor::delete_extra_cursors);
-    shortcuts.emplace_back(input{{ImGuiKey_Tab}, input::modifiers::none}, [](void*, editor& ed) {
+    shortcuts.emplace_back(input{{ImGuiKey_Tab}, input::modifiers::none}, [](std::any, editor& ed) {
         ed.input_char_utf16('\t');
     });
 
