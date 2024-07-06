@@ -195,9 +195,8 @@ namespace ImEdit {
 
         // char addition
         struct chars_addition {
-            std::vector<char> added_chars;
-            simple_coord add_location;
-            bool added_token;
+            std::vector<std::vector<char>> added_chars;
+            std::vector<simple_coord> add_location;
 
             std::vector<simple_coord> cursors_coords;
         };

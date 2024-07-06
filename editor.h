@@ -317,7 +317,7 @@ namespace ImEdit {
 
         void add_cursor_undo_record();
         void add_char_deletion_record(std::vector<char>, coordinates, bool deleted_token);
-        void add_char_addition_record(std::vector<char>, coordinates, bool added_token);
+        void add_char_addition_record(std::vector<char>, coordinates);
         void add_line_addition_record(coordinates);
         void add_line_deletion_record(coordinates);
         void add_selection_deletion_record(std::vector<line>, region);
@@ -356,6 +356,7 @@ namespace ImEdit {
 
         mutable bool _should_call_pmc{true}; // if public function call and this is true, set to false, call _public_methods_callback, and re-set to true before function exit
         bool _should_create_records{true}; // set to false when within undo/redo
+        bool _cursor_moved_by_action_since_last_ca_record{false}; // set to true when cursor is moved by mouse, arrow moves, or others. Set to false by add_char_addition_record
 
         std::vector<region> _regex_results{};
         unsigned int _regex_results_index{};
