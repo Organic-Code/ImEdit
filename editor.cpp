@@ -658,6 +658,8 @@ ImEdit::editor::editor(std::string id) :
         _shortcuts{get_default_shortcuts()}
 {
     _cursors.emplace_back();
+
+    _lines.emplace_back();
 }
 
 void ImEdit::editor::move_cursors_up() {
@@ -1501,6 +1503,8 @@ void ImEdit::editor::clear() {
     _undo_record.clear();
     _undo_record_it = _undo_record.begin();
     _cursors.emplace_back();
+
+    _lines.emplace_back();
 }
 
 void ImEdit::editor::find_longest_line() {
