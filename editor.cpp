@@ -23,6 +23,10 @@
  *                                                                                      *
  ****************************************************************************************/
 
+#ifndef IMGUI_DEFINE_MATH_OPERATORS
+#define IMGUI_DEFINE_MATH_OPERATORS
+#endif
+
 #include <algorithm>
 #include <sstream>
 #include <cctype>
@@ -48,16 +52,6 @@
 #define IMEDIT_RESTORE_PMC if (called_pmc) { _should_call_pmc = true; }
 
 namespace {
-    ImVec2 operator+(const ImVec2& lhs, const ImVec2& rhs) {
-        return {lhs.x + rhs.x, lhs.y + rhs.y};
-    }
-    ImVec2 operator-(const ImVec2& lhs, const ImVec2& rhs) {
-        return {lhs.x - rhs.x, lhs.y - rhs.y};
-    }
-    ImVec2 operator*(const ImVec2& lhs, float rhs) {
-        return {lhs.x * rhs, lhs.y * rhs};
-    }
-
     bool isopening(char c) {
         return c == '(' || c == '[' || c == '{';
     }

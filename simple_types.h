@@ -88,7 +88,7 @@ namespace ImEdit {
     };
 
     struct token_hash {
-        std::size_t operator()(const token& tok) const {
+        std::size_t operator()(const token& tok) const noexcept {
             return str_hash(tok.data) >> 8 | static_cast<std::size_t>(tok.id) << (sizeof(std::size_t) * 8 - 8);
         }
         std::hash<std::string> str_hash;
@@ -123,7 +123,7 @@ namespace ImEdit {
         ImColor current_line_color{};
         ImColor breakpoint_color{};
         ImColor breakpoint_hover_color{};
-        std::unordered_map<token_type::enum_, token_style, token_type> token_style{};
+        std::unordered_map<token_type::enum_, ImEdit::token_style, token_type> token_style{};
     };
 
     struct coordinates {

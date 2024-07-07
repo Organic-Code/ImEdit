@@ -68,7 +68,7 @@ namespace ImEdit {
             using iterator_category = std::bidirectional_iterator_tag;
 
             iterator() = default;
-            iterator(editor* e, coordinates c) noexcept : ed{e}, current{c} {}
+            iterator(ImEdit::editor* e, coordinates c) noexcept : ed{e}, current{c} {}
             iterator(const iterator& other) noexcept = default;
             iterator& operator=(const iterator& other) noexcept = default;
 
@@ -81,10 +81,10 @@ namespace ImEdit {
             bool operator!=(const iterator& other) const noexcept;
 
             [[nodiscard]] coordinates get_coord() const noexcept { return current; }
-            [[nodiscard]] editor& editor() noexcept { return *ed; };
+            [[nodiscard]] ImEdit::editor& editor() noexcept { return *ed; }
 
         private:
-            class editor* ed{nullptr};
+            ImEdit::editor* ed{nullptr};
             coordinates current{};
         };
 
