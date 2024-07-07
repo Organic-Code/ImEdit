@@ -1208,6 +1208,34 @@ void ImEdit::editor::toggle_selection(ImEdit::region r) {
     _selections.push_back(r);
 }
 
+void ImEdit::editor::delete_next_token() {
+    IMEDIT_CALL_PMC(delete_next_token)
+    for (cursor& c : _cursors) {
+        auto idx = region_idx_for_cursor(c);
+        if (!idx) {
+            auto begin = c.coord;
+            auto end = move_coordinates_right_token(c.coord);
+            toggle_selection({begin, end});
+        }
+    }
+    delete_selections();
+    IMEDIT_RESTORE_PMC
+}
+
+void ImEdit::editor::delete_previous_token() {
+    IMEDIT_CALL_PMC(delete_previous_token)
+    for (cursor& c : _cursors) {
+        auto idx = region_idx_for_cursor(c);
+        if (!idx) {
+            auto begin = move_coordinates_left_token(c.coord);
+            auto end = c.coord;
+            toggle_selection({begin, end});
+        }
+    }
+    delete_selections();
+    IMEDIT_RESTORE_PMC
+}
+
 unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const noexcept {
     if (coord.token == 0 && coord.char_index == 0) {
         return 0;
@@ -2069,159 +2097,183 @@ void ImEdit::editor::delete_selections() {
     if (_selections.empty()) {
         return;
     }
-    // TODO call lexer, also with previous data
-
-    // FIXME buggy
 
     _cursor_moved_by_action_since_last_record = true;
-    // Deleting last selection first so that we don’t have to move a bunch of coordinates.
-    std::vector<region> sorted_selections = _selections;
-    std::sort(sorted_selections.begin(), sorted_selections.end(), [this](const region& r1, const region& r2) {
-        return coordinates_lt(r2.beg, r1.beg);
-    });
-    for (auto & select : sorted_selections) {
-
-        const coordinates beg = smaller_coordinates_of(select);
-        const coordinates end = greater_coordinates_of(select);
-
-        {
-            std::vector<line> deleted_lines;
-            deleted_lines.reserve(end.line - beg.line + 1);
-            for (unsigned int i = beg.line; i <= end.line; ++i) {
-                deleted_lines.push_back(_lines[i]);
-            }
-
-            add_selection_deletion_record(std::move(deleted_lines), select);
-        }
-
-        std::vector<unsigned int> cursor_needs_move;
-        for (unsigned int i = 0 ; i < _cursors.size() ; ++i) {
-            if (coordinates_within(_cursors[i].coord, select)) {
-                _cursors[i].coord = beg;
-            }
-            else if (coordinates_lt(end, _cursors[i].coord)) {
-                cursor_needs_move.emplace_back(i);
-            }
-        }
-
-        if (beg.line == end.line) {
-
-            auto& line = _lines[beg.line];
-            assert(!line.tokens.empty());
-            if (beg.token == end.token) {
-                bool token_deleted = false;
-                line.tokens[beg.token].data.erase(beg.char_index, end.char_index - beg.char_index);
-                if (line.tokens[beg.token].data.empty()) {
-                    line.tokens.erase(std::next(line.tokens.begin(), beg.token));
-                    token_deleted = true;
-                }
-
-                for (unsigned int idx : cursor_needs_move) {
-                    if (_cursors[idx].coord.line == end.line && _cursors[idx].coord.token == end.token) {
-                        _cursors[idx].coord.char_index -= (end.char_index - beg.char_index);
-                    }
-                }
-
-                if (token_deleted) {
-                    for (unsigned int idx : cursor_needs_move) {
-                        if (_cursors[idx].coord.line == end.line && _cursors[idx].coord.token >= end.token) {
-                            _cursors[idx].coord.token--;
-                        }
-                    }
-                }
-
-            } else {
-                unsigned int deleted_token_count = end.token - beg.token - 1;
-
-                line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1),
-                                  std::next(line.tokens.begin(), end.token));
-                if (beg.char_index == 0) {
-                    ++deleted_token_count;
-                    line.tokens.erase(std::next(line.tokens.begin(), beg.token));
-
-                    // deleting end token (may be a partial delete)
-                    line.tokens[beg.token].data.erase(0, end.char_index);
-                    if (line.tokens[beg.token].data.empty()) {
-                        ++deleted_token_count;
-                        line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
-                    }
-                } else {
-                    line.tokens[beg.token].data.erase(beg.char_index);
-
-                    // deleting end token (may be a partial delete)
-                    line.tokens[beg.token + 1].data.erase(0, end.char_index);
-                    if (line.tokens[beg.token + 1].data.empty()) {
-                        ++deleted_token_count;
-                        line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
-                    }
-                }
-
-
-
-                for (unsigned int idx : cursor_needs_move) {
-                    if (_cursors[idx].coord.line == end.line) {
-                        if (_cursors[idx].coord.token == end.token) {
-                            _cursors[idx].coord.token -= deleted_token_count;
-                            _cursors[idx].coord.char_index -= end.char_index;
-                        }
-                        else {
-                            _cursors[idx].coord.token -= deleted_token_count;
-                        }
-                    }
-                }
-            }
-
-        } else {
-            int extra_token_deleted = 0;
-            {
-                auto &beg_line = _lines[beg.line];
-                if (!beg_line.tokens.empty()) {
-                    if (beg.token + 1 < beg_line.tokens.size()) {
-                        beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token + 1), beg_line.tokens.end());
-                    }
-                    if (beg.char_index == 0) {
-                        ++extra_token_deleted;
-                        beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token));
-                    } else if (beg.char_index < beg_line.tokens[beg.token].data.size()) {
-                        beg_line.tokens[beg.token].data.erase(beg.char_index);
-                    }
-                }
-            } // beg_line invalidated after _lines.erase call
-
-            _lines.erase(std::next(_lines.begin(), beg.line + 1), std::next(_lines.begin(), end.line));
-
-            auto& end_line = _lines[beg.line + 1];
-            end_line.tokens.erase(end_line.tokens.begin(), std::next(end_line.tokens.begin(), end.token));
-            if (!end_line.tokens.empty()) {
-                end_line.tokens.front().data.erase(0, end.char_index);
-                if (end_line.tokens.front().data.empty()) {
-                    ++extra_token_deleted;
-                    end_line.tokens.erase(end_line.tokens.begin());
-                }
-            }
-
-            for (token& tok : end_line.tokens) {
-                _lines[beg.line].tokens.emplace_back(std::move(tok));
-            }
-            _lines.erase(std::next(_lines.begin(), beg.line + 1));
-
-            for (unsigned int idx : cursor_needs_move) {
-                if (_cursors[idx].coord.line == end.line) {
-                    if (_cursors[idx].coord.token == end.token) {
-                        _cursors[idx].coord.char_index -= end.char_index;
-                    }
-                    _cursors[idx].coord.token -= extra_token_deleted;
-                    _cursors[idx].coord.token += beg.token + 1;
-                    _cursors[idx].coord.token -= end.token;
-                }
-                _cursors[idx].coord.line -= (end.line - beg.line);
-            }
-        }
+    for (auto & select : _selections) {
+        delete_selection(select);
     }
     _selections.clear();
     sanitize_cursors();
 
     IMEDIT_RESTORE_PMC
+}
+
+void ImEdit::editor::delete_selection(ImEdit::region select) {
+    // TODO call lexer, also with previous data
+
+    // FIXME buggy
+    const coordinates beg = smaller_coordinates_of(select);
+    const coordinates end = greater_coordinates_of(select);
+
+    {
+        std::vector<line> deleted_lines;
+        deleted_lines.reserve(end.line - beg.line + 1);
+        for (unsigned int i = beg.line; i <= end.line; ++i) {
+            deleted_lines.push_back(_lines[i]);
+        }
+
+        add_selection_deletion_record(std::move(deleted_lines), select);
+    }
+
+    std::vector<unsigned int> cursor_needs_move;
+    for (unsigned int i = 0 ; i < _cursors.size() ; ++i) {
+        if (coordinates_within(_cursors[i].coord, select)) {
+            _cursors[i].coord = beg;
+        }
+        else if (coordinates_lt(end, _cursors[i].coord)) {
+            cursor_needs_move.emplace_back(i);
+        }
+    }
+
+    std::vector<unsigned int> selections_need_move;
+    for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
+        if (coordinates_lt(select.end, _selections[i].beg)) {
+            selections_need_move.push_back(i);
+        }
+    }
+
+    if (beg.line == end.line) {
+
+        auto& line = _lines[beg.line];
+        assert(!line.tokens.empty());
+        if (beg.token == end.token) {
+            bool token_deleted = false;
+            line.tokens[beg.token].data.erase(beg.char_index, end.char_index - beg.char_index);
+            if (line.tokens[beg.token].data.empty()) {
+                line.tokens.erase(std::next(line.tokens.begin(), beg.token));
+                token_deleted = true;
+            }
+
+            auto shift_coordinates = [&token_deleted, &beg, &end](coordinates& coord) {
+                if (coord.line == end.line && coord.token == end.token) {
+                    coord.char_index -= (end.char_index - beg.char_index);
+                }
+                if (token_deleted) {
+                    if (coord.line == end.line && coord.token >= end.token) {
+                        coord.token--;
+                    }
+                }
+            };
+            for (unsigned int idx : cursor_needs_move) {
+                shift_coordinates(_cursors[idx].coord);
+            }
+            for (unsigned int idx : selections_need_move) {
+                shift_coordinates(_selections[idx].beg);
+                shift_coordinates(_selections[idx].end);
+            }
+
+        } else {
+            unsigned int deleted_token_count = end.token - beg.token - 1;
+
+            line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1),
+                              std::next(line.tokens.begin(), end.token));
+            if (beg.char_index == 0) {
+                ++deleted_token_count;
+                line.tokens.erase(std::next(line.tokens.begin(), beg.token));
+
+                // deleting end token (may be a partial delete)
+                line.tokens[beg.token].data.erase(0, end.char_index);
+                if (line.tokens[beg.token].data.empty()) {
+                    ++deleted_token_count;
+                    line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
+                }
+            } else {
+                line.tokens[beg.token].data.erase(beg.char_index);
+
+                // deleting end token (may be a partial delete)
+                line.tokens[beg.token + 1].data.erase(0, end.char_index);
+                if (line.tokens[beg.token + 1].data.empty()) {
+                    ++deleted_token_count;
+                    line.tokens.erase(std::next(line.tokens.begin(), beg.token + 1));
+                }
+            }
+
+
+            auto shift_coordinates = [&end, &deleted_token_count](coordinates& coord) {
+                if (coord.line == end.line) {
+                    if (coord.token == end.token) {
+                        coord.token -= deleted_token_count;
+                        coord.char_index -= end.char_index;
+                    }
+                    else {
+                        coord.token -= deleted_token_count;
+                    }
+                }
+            };
+
+            for (unsigned int idx : cursor_needs_move) {
+                shift_coordinates(_cursors[idx].coord);
+            }
+            for (unsigned int idx : selections_need_move) {
+                shift_coordinates(_selections[idx].beg);
+                shift_coordinates(_selections[idx].end);
+            }
+        }
+
+    } else {
+        int extra_token_deleted = 0;
+        {
+            auto &beg_line = _lines[beg.line];
+            if (!beg_line.tokens.empty()) {
+                if (beg.token + 1 < beg_line.tokens.size()) {
+                    beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token + 1), beg_line.tokens.end());
+                }
+                if (beg.char_index == 0) {
+                    ++extra_token_deleted;
+                    beg_line.tokens.erase(std::next(beg_line.tokens.begin(), beg.token));
+                } else if (beg.char_index < beg_line.tokens[beg.token].data.size()) {
+                    beg_line.tokens[beg.token].data.erase(beg.char_index);
+                }
+            }
+        } // beg_line invalidated after _lines.erase call
+
+        _lines.erase(std::next(_lines.begin(), beg.line + 1), std::next(_lines.begin(), end.line));
+
+        auto& end_line = _lines[beg.line + 1];
+        end_line.tokens.erase(end_line.tokens.begin(), std::next(end_line.tokens.begin(), end.token));
+        if (!end_line.tokens.empty()) {
+            end_line.tokens.front().data.erase(0, end.char_index);
+            if (end_line.tokens.front().data.empty()) {
+                ++extra_token_deleted;
+                end_line.tokens.erase(end_line.tokens.begin());
+            }
+        }
+
+        for (token& tok : end_line.tokens) {
+            _lines[beg.line].tokens.emplace_back(std::move(tok));
+        }
+        _lines.erase(std::next(_lines.begin(), beg.line + 1));
+
+        auto shift_coordinates = [&beg, &end, &extra_token_deleted](coordinates& coord) {
+            if (coord.line == end.line) {
+                if (coord.token == end.token) {
+                    coord.char_index -= end.char_index;
+                }
+                coord.token -= extra_token_deleted;
+                coord.token += beg.token + 1;
+                coord.token -= end.token;
+            }
+            coord.line -= (end.line - beg.line);
+        };
+
+        for (unsigned int idx : cursor_needs_move) {
+            shift_coordinates(_cursors[idx].coord);
+        }
+        for (unsigned int idx : selections_need_move) {
+            shift_coordinates(_selections[idx].beg);
+            shift_coordinates(_selections[idx].end);
+        }
+    }
 }
 
 void ImEdit::editor::undo() {
@@ -3124,6 +3176,20 @@ void ImEdit::editor::cut_to_clipboard() {
     IMEDIT_RESTORE_PMC
 }
 
+bool ImEdit::editor::is_mouse_in_breakpoint_column() const noexcept {
+    auto mouse_coord = screen_to_token_coordinates(ImGui::GetMousePos());
+    return _breakpoint_toggled && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && mouse_coord.is_left && mouse_coord.char_index > 1;
+}
+
+std::optional<unsigned int> ImEdit::editor::region_idx_for_cursor(cursor& c) {
+    for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
+        if (coordinates_eq(c.coord, _selections[i].beg) || coordinates_eq(c.coord, _selections[i].end)) {
+            return i;
+        }
+    }
+    return {};
+}
+
 void ImEdit::editor::add_shortcut(input in, std::function<void(std::any, editor &)> callback) {
     _shortcuts.emplace_back(std::move(in), std::move(callback));
 }
@@ -3176,6 +3242,8 @@ std::vector<std::pair<ImEdit::input, std::function<void(std::any, ImEdit::editor
     add_memb_fn({{ImGuiKey_Home}, input::modifiers::control}, &editor::move_cursors_to_begfile);
     add_memb_fn({{ImGuiKey_Z}, input::modifiers::control}, &editor::undo);
     add_memb_fn({{ImGuiKey_Y}, input::modifiers::control}, &editor::redo);
+    add_memb_fn({{ImGuiKey_Backspace}, input::modifiers::control}, &editor::delete_previous_token);
+    add_memb_fn({{ImGuiKey_Delete}, input::modifiers::control}, &editor::delete_next_token);
 
     add_memb_fn({{ImGuiKey_LeftArrow}, input::modifiers::shift}, &editor::selection_toggle_left);
     add_memb_fn({{ImGuiKey_RightArrow}, input::modifiers::shift}, &editor::selection_toggle_right);
@@ -3226,9 +3294,3 @@ ImEdit::style ImEdit::editor::get_default_style() {
     s.token_style[token_type::max]               = token_style{ImColor(  0,   0,   0, 255), false, false};
     return s;
 }
-
-bool ImEdit::editor::is_mouse_in_breakpoint_column() const noexcept {
-    auto mouse_coord = screen_to_token_coordinates(ImGui::GetMousePos());
-    return _breakpoint_toggled && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) && mouse_coord.is_left && mouse_coord.char_index > 1;
-}
-

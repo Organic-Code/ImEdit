@@ -197,6 +197,9 @@ namespace ImEdit {
         void selection_begfile(); // selects from cursors to the beginning of the file (default ctrl+shift+begin)
         void selection_endfile(); // selects from cursors to the end of the file (default : ctrl+shift+end)
 
+        void delete_next_token(); // if something is selected, deletes selection instead (on a per cursor basis). (default : ctrl+del)
+        void delete_previous_token(); // if something is selected, deletes selection instead (on a per cursor basis). (default : ctrl+backspace)
+
         void input_char_utf16(ImWchar c); // Simulates a keyboard input. Moves cursors
         void input_raw_char(char c); // Inputs a specific char. Moves cursors. Do not use input_raw_char('\n'), use input_newline instead.
         void input_newline(); // Inputs a new line. Moves cursors.
@@ -292,6 +295,10 @@ namespace ImEdit {
         [[nodiscard]] region sorted_region(region) const noexcept;
         [[nodiscard]] coordinates& greater_coordinates_of(region&) const noexcept;
         [[nodiscard]] coordinates& smaller_coordinates_of(region&) const noexcept;
+
+        void delete_selection(region select); // Does NOT remove select from _selections
+
+        std::optional<unsigned int> region_idx_for_cursor(cursor& c);
 
         [[nodiscard]] bool is_mouse_in_breakpoint_column() const noexcept;
 
