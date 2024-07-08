@@ -249,11 +249,7 @@ void ImEdit::editor::set_data(const std::string &data) {
                 current_token.push_back(*it++);
                 tokens.push_back({std::move(current_token), token_type::opening});
             }
-            else if (iscomma(*it)) {
-                current_token.push_back(*it++);
-                tokens.push_back({std::move(current_token), token_type::punctuation});
-            }
-            else if (istokseparator(*it)) {
+            else if (iscomma(*it) || istokseparator(*it)) {
                 current_token.push_back(*it++);
                 tokens.push_back({std::move(current_token), token_type::punctuation});
             }
@@ -267,6 +263,7 @@ void ImEdit::editor::set_data(const std::string &data) {
         }
     }
 
+    _lines.clear();
     std::copy(unparsed_tokens.begin(), unparsed_tokens.end(), std::back_inserter(_lines));
     // TODO: make this tokenization optional
     // TODO: call lexer function
