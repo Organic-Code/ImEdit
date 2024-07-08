@@ -112,6 +112,7 @@ namespace ImEdit {
         bool has_cursor(coordinates coords);
         void add_cursor(coordinates coords);
         void remove_cursor(coordinates coords);
+        void set_cursor(coordinates coords); // Sets a single cursor at given coordinates. Remove other cursors.
 
         // returns the coordinates of the mouse in editor coordinates
         coordinates mouse_position();
