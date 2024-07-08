@@ -68,7 +68,7 @@ namespace ImEdit {
             using iterator_category = std::bidirectional_iterator_tag;
 
             iterator() = default;
-            iterator(ImEdit::editor* e, coordinates c) noexcept : ed{e}, current{c} {}
+            iterator(const ImEdit::editor* e, coordinates c) noexcept : ed{e}, current{c} {}
             iterator(const iterator& other) noexcept = default;
             iterator& operator=(const iterator& other) noexcept = default;
 
@@ -81,10 +81,10 @@ namespace ImEdit {
             bool operator!=(const iterator& other) const noexcept;
 
             [[nodiscard]] coordinates get_coord() const noexcept { return current; }
-            [[nodiscard]] ImEdit::editor& editor() noexcept { return *ed; }
+            [[nodiscard]] const ImEdit::editor& editor() noexcept { return *ed; }
 
         private:
-            ImEdit::editor* ed{nullptr};
+            const ImEdit::editor* ed{nullptr};
             coordinates current{};
         };
 
@@ -98,8 +98,8 @@ namespace ImEdit {
          */
         // TODO specify when those are invalidated
         // iterates over data, giving away char. Output only.
-        iterator begin() noexcept;
-        iterator end() noexcept;
+        iterator begin() const noexcept;
+        iterator end() const noexcept;
 
         void set_data(const std::string& data);
         void set_data(std::deque<line> lines);
@@ -147,7 +147,7 @@ namespace ImEdit {
         void grab_focus() { _should_grab_focus = true; }
 
         /**
-         * All the following methods call _public_methods_callback
+         * The following methods call _public_methods_callback
          */
         void delete_extra_cursors(); // keeps only one cursor
 
@@ -252,6 +252,20 @@ namespace ImEdit {
 
         size_t _undo_history_size{200};
 
+
+
+
+    /*************************************************************************************
+     *
+     * Utilities methods. Those do not call _public_methods_callback
+     *
+     */
+        [[nodiscard]] bool coordinates_eq(coordinates lhs, coordinates rhs) const noexcept;
+        [[nodiscard]] bool coordinates_lt(coordinates lhs, coordinates rhs) const noexcept;
+        [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
+        [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
+        [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
+
     /*************************************************************************************
      *
      * Private methods and variables
@@ -276,12 +290,6 @@ namespace ImEdit {
         [[nodiscard]] coordinates move_coordinates_begline(coordinates) const noexcept;
 
         [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos) const;
-
-        [[nodiscard]] bool coordinates_eq(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_lt(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
-        [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
 
         [[nodiscard]] simple_coord to_simple_coords(coordinates) const noexcept;
         [[nodiscard]] std::vector<simple_coord> cursors_as_simple() const;

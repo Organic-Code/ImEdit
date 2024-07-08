@@ -186,11 +186,11 @@ bool ImEdit::editor::iterator::operator!=(const ImEdit::editor::iterator &other)
     return !(*this == other);
 }
 
-ImEdit::editor::iterator ImEdit::editor::begin() noexcept {
+ImEdit::editor::iterator ImEdit::editor::begin() const noexcept {
     return iterator{this, coordinates{0, 0, 0}};
 }
 
-ImEdit::editor::iterator ImEdit::editor::end() noexcept {
+ImEdit::editor::iterator ImEdit::editor::end() const noexcept {
     if (_lines.empty()) {
         return begin();
     }
@@ -225,7 +225,7 @@ void ImEdit::editor::set_data(const std::string &data) {
             iss.getline(str.data() + already_assigned, static_cast<long>(str.size() + 1 - already_assigned));
             already_assigned = str.size();
 
-        } while (iss.fail());
+        } while (!iss.eof() && iss.fail());
 
         std::string line = str.data(); // trimming extras '\0' NOLINT(*-redundant-string-cstr)
         unparsed_tokens.emplace_back();
@@ -253,15 +253,21 @@ void ImEdit::editor::set_data(const std::string &data) {
                 current_token.push_back(*it++);
                 tokens.push_back({std::move(current_token), token_type::punctuation});
             }
+            else if (istokseparator(*it)) {
+                current_token.push_back(*it++);
+                tokens.push_back({std::move(current_token), token_type::punctuation});
+            }
             else {
                 do {
                     current_token.push_back(*it++);
-                } while (it != line.end() && !istokseparator(*it));
+                } while (!istokseparator(*it) && it != line.end());
                 tokens.push_back({std::move(current_token), token_type::unknown});
             }
 
         }
     }
+
+    std::copy(unparsed_tokens.begin(), unparsed_tokens.end(), std::back_inserter(_lines));
     // TODO: make this tokenization optional
     // TODO: call lexer function
 }
