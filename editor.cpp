@@ -320,7 +320,7 @@ void ImEdit::editor::render() {
         ImGui::SetWindowFocus();
     }
 
-    ImGui::InvisibleButton("invisible button",
+    ImGui::InvisibleButton(_imgui_id.c_str(),
                            {draw_region.x, std::max(draw_region.y, ImGui::GetTextLineHeightWithSpacing() * static_cast<float>(_lines.size()))});
 
     const auto rect_min = ImGui::GetItemRectMin();
