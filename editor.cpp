@@ -1462,7 +1462,7 @@ void ImEdit::editor::remove_cursor(coordinates coords) {
 void ImEdit::editor::set_cursor(coordinates coords) {
     assert(coords.line < _lines.size());
     assert(_lines[coords.line].tokens.empty() || coords.token < _lines[coords.line].tokens.size());
-    assert(_lines[coords.line].tokens.empty() || coords.char_index <= _lines[coords.line].tokens[coords.char_index].data.size());
+    assert(_lines[coords.line].tokens.empty() || coords.char_index <= _lines[coords.line].tokens[coords.token].data.size());
 
     _cursors.clear();
     _cursors.push_back({coords, column_count_to(coords)});
