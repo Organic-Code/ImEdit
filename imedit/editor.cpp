@@ -1848,7 +1848,7 @@ void ImEdit::editor::handle_mouse_input() {
             _showing_breakpoint_window = false;
         }
         else if (is_mouse_in_breakpoint_column()) {
-            if (mouse_coord.line < _lines.size()) {
+            if (mouse_coord.line < _lines.size() && _lines[mouse_coord.line].has_breakpoint) {
                 _selected_breakpoint_line = mouse_coord.line;
                 _showing_breakpoint_window = true;
                 _breakpoint_window_just_opened = true;
