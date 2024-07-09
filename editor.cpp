@@ -1531,6 +1531,7 @@ void ImEdit::editor::find_longest_line() {
             _longest_line_idx = i;
         }
     }
+    _longest_line_px += 1; // adding one pixel for cursor display
 }
 
 float ImEdit::editor::calc_line_size(unsigned int line) const noexcept {
