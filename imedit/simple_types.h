@@ -123,6 +123,8 @@ namespace ImEdit {
         ImColor current_line_color{};
         ImColor breakpoint_color{};
         ImColor breakpoint_hover_color{};
+        ImColor autocompletion_bg_color{};
+        ImColor autocompletion_selected_bg_color{};
         std::unordered_map<token_type::enum_, ImEdit::token_style, token_type> token_style{};
     };
 

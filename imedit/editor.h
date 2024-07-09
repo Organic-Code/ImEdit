@@ -93,7 +93,7 @@ namespace ImEdit {
 
         void render();
 
-        /**
+        /*****************************************
          * The following methods do not call _public_methods_callback
          */
         // TODO specify when those are invalidated
@@ -105,6 +105,8 @@ namespace ImEdit {
         void set_data(std::deque<line> lines);
         [[nodiscard]] const std::deque<line>& get_data() const noexcept { return _lines; }
         void set_line_color(unsigned int line, std::optional<ImColor> color) noexcept;
+
+        const line& get_line(unsigned int line_no) const noexcept { return _lines[line_no]; }
 
         [[nodiscard]] const std::vector<region>& get_selections() const noexcept { return _selections; }
 
@@ -147,7 +149,12 @@ namespace ImEdit {
 
         void grab_focus() { _should_grab_focus = true; }
 
-        /**
+        void set_autocomplete(const std::vector<std::string>& completion);
+        void auto_complete_or_tab_input(); // auto complete if autocompletion is available, else input a tab (default : tab)
+        void select_next_autocomplete_or_down(); // if auto complete isn’t empty, selects the next one, else moves the cursor down (default : arrow down)
+        void select_prev_autocomplete_or_up(); // if auto complete isn’t empty, selects the previous one, else moves the cursor up (default : arrow up)
+
+        /*****************************************
          * The following methods call _public_methods_callback
          */
         void delete_extra_cursors(); // keeps only one cursor
@@ -253,6 +260,11 @@ namespace ImEdit {
 
         size_t _undo_history_size{200};
 
+        // data is filled by _on_text_typing_data
+        std::function<void(std::any data, coordinates coord, const line& before, const line& current, editor& this_editor)> _on_text_typing{}; // called whenever text is typed (TODO multicursor)
+        std::any _on_text_typing_data;
+
+
 
 
 
@@ -335,6 +347,7 @@ namespace ImEdit {
 
         void show_tooltip();
         void show_breakpoint_window();
+        void show_autocomplete_window(ImVec2 coords);
 
         void add_cursor_undo_record();
         void add_char_deletion_record(std::vector<char>, coordinates, bool deleted_token, const std::vector<cursor>& cursors_location);
@@ -385,6 +398,10 @@ namespace ImEdit {
 
         std::list<record> _undo_record{};
         std::list<record>::iterator _undo_record_it{_undo_record.end()};
+
+        std::vector<std::string> _autocompletion{};
+        std::optional<unsigned int> _autocompletion_selection{};
+        float _autocompletion_width{};
     };
 }
 

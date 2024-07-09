@@ -576,6 +576,17 @@ void ImEdit::editor::render() {
         show_breakpoint_window();
     }
 
+    if (!_autocompletion.empty()) {
+        auto coords = _cursors.back().coord;
+        coords.char_index = 0;
+
+        float pos_x = static_cast<float>(column_count_to(coords)) * glyph_size().x + extra_padding;
+        float pos_y = static_cast<float>(coords.line - first_rendered_line) * ImGui::GetTextLineHeightWithSpacing();
+
+
+        show_autocomplete_window(_imgui_cursor_position + ImVec2{pos_x, pos_y});
+    }
+
     if (_default_font != nullptr) {
         ImGui::PopFont();
     }
@@ -2851,11 +2862,104 @@ void ImEdit::editor::show_breakpoint_window() {
        ImGui::SetNextWindowPos(ImGui::GetMousePos() + ImVec2{5, 5});
        _breakpoint_window_just_opened = false;
     }
-    if (ImGui::Begin("##breakpoint", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::Begin("##breakpoint", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
         assert(_breakpoint_window_filler);
         _breakpoint_window_filler(_breakpoint_data, _selected_breakpoint_line, *this);
     }
     ImGui::End();
+}
+
+void ImEdit::editor::show_autocomplete_window(ImVec2 coords) {
+    coords.y += ImGui::GetTextLineHeightWithSpacing();
+    ImGui::SetNextWindowPos(coords);
+    if (ImGui::Begin("##autocomplete", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+        auto draw_list = ImGui::GetWindowDrawList();
+        auto cursor = ImGui::GetCursorScreenPos();
+
+        if (_autocompletion_width == 0.f) {
+            for (const std::string& str : _autocompletion) {
+                _autocompletion_width = std::max(_autocompletion_width, static_cast<float>(str.size()) * glyph_size().x);
+            }
+        }
+
+        ImGui::Dummy({_autocompletion_width,
+                      static_cast<float>(_autocompletion.size()) * ImGui::GetTextLineHeightWithSpacing()});
+
+        for (auto i = 0u ; i < _autocompletion.size() ; ++i) {
+            if (_autocompletion_selection && i == *_autocompletion_selection) {
+                draw_list->AddRectFilled(cursor, {cursor.x + _autocompletion_width, cursor.y + ImGui::GetTextLineHeightWithSpacing()}, _style.autocompletion_selected_bg_color);
+            }
+            else {
+                draw_list->AddRectFilled(cursor, {cursor.x + _autocompletion_width, cursor.y + ImGui::GetTextLineHeightWithSpacing()}, _style.autocompletion_bg_color);
+            }
+            cursor.y += (ImGui::GetTextLineHeightWithSpacing() - glyph_size().y) / 2;
+            draw_list->AddText(cursor, ImColor(255, 255, 255, 255), _autocompletion[i].c_str(), _autocompletion[i].c_str() + _autocompletion[i].size()); // FIXME
+            cursor.y -= (ImGui::GetTextLineHeightWithSpacing() - glyph_size().y) / 2;
+
+            cursor.y += ImGui::GetTextLineHeightWithSpacing();
+        }
+    }
+    ImGui::End();
+}
+
+void ImEdit::editor::set_autocomplete(const std::vector<std::string> &completion) {
+    _autocompletion = completion;
+    if (_autocompletion.empty()) {
+        _autocompletion_selection.reset();
+        _autocompletion_width = 0.f;
+    }
+    else {
+        _autocompletion_selection = 0;
+    }
+}
+
+void ImEdit::editor::auto_complete_or_tab_input() {
+    if (_autocompletion.empty()) {
+        input_raw_char('\t');
+    }
+    else {
+        assert(_autocompletion_selection);
+        const std::string& str = _autocompletion[*_autocompletion_selection];
+        for (cursor& c : _cursors) {
+            if (_lines[c.coord.line].tokens.empty()) {
+                _lines[c.coord.line].tokens.push_back({str, token_type::unknown});
+                c.coord.char_index = str.size();
+            }
+            else {
+                _lines[c.coord.line].tokens[c.coord.token].data = str;
+                c.coord.char_index = str.size();
+            }
+        }
+        find_longest_line(); // todo don’t call this, compute for modified lines only instead
+
+    }
+}
+
+void ImEdit::editor::select_next_autocomplete_or_down() {
+    if (_autocompletion.empty()) {
+        move_cursors_down();
+    }
+    else {
+        assert(_autocompletion_selection);
+        ++*_autocompletion_selection;
+        if (_autocompletion_selection == _autocompletion.size()) {
+            _autocompletion_selection = 0;
+        }
+    }
+}
+
+void ImEdit::editor::select_prev_autocomplete_or_up() {
+    if (_autocompletion.empty()) {
+        move_cursors_up();
+    }
+    else {
+        assert(_autocompletion_selection);
+        if (*_autocompletion_selection == 0) {
+            _autocompletion_selection = _autocompletion.size() - 1;
+        } else {
+            --*_autocompletion_selection;
+        }
+    }
 }
 
 void ImEdit::editor::add_cursor_undo_record() {
@@ -3231,16 +3335,14 @@ std::vector<std::pair<ImEdit::input, std::function<void(std::any, ImEdit::editor
     add_memb_fn({{ImGuiKey_Delete}, input::modifiers::none}, &editor::input_delete);
     add_memb_fn({{ImGuiKey_Enter}, input::modifiers::none}, &editor::input_newline);
     add_memb_fn({{ImGuiKey_Backspace}, input::modifiers::none}, &editor::input_backspace);
-    add_memb_fn({{ImGuiKey_DownArrow}, input::modifiers::none}, &editor::move_cursors_down);
-    add_memb_fn({{ImGuiKey_UpArrow}, input::modifiers::none}, &editor::move_cursors_up);
+    add_memb_fn({{ImGuiKey_DownArrow}, input::modifiers::none}, &editor::select_next_autocomplete_or_down);
+    add_memb_fn({{ImGuiKey_UpArrow}, input::modifiers::none}, &editor::select_prev_autocomplete_or_up);
     add_memb_fn({{ImGuiKey_LeftArrow}, input::modifiers::none}, &editor::move_cursors_left);
     add_memb_fn({{ImGuiKey_RightArrow}, input::modifiers::none}, &editor::move_cursors_right);
     add_memb_fn({{ImGuiKey_End}, input::modifiers::none}, &editor::move_cursors_to_end);
     add_memb_fn({{ImGuiKey_Home}, input::modifiers::none}, &editor::move_cursors_to_beg);
     add_memb_fn({{ImGuiKey_Escape}, input::modifiers::none}, &editor::delete_extra_cursors);
-    shortcuts.emplace_back(input{{ImGuiKey_Tab}, input::modifiers::none}, [](std::any, editor& ed) {
-        ed.input_char_utf16('\t');
-    });
+    add_memb_fn({{ImGuiKey_Tab}, input::modifiers::none}, &editor::auto_complete_or_tab_input);
 
     add_memb_fn({{ImGuiKey_Enter}, input::modifiers::control}, &editor::input_newline_nomove);
     add_memb_fn({{ImGuiKey_DownArrow}, input::modifiers::control}, &editor::scroll_down_next_frame);
@@ -3288,6 +3390,8 @@ ImEdit::style ImEdit::editor::get_default_style() {
     s.current_line_color                         = ImColor( 50,  50,  50, 255);
     s.breakpoint_color                           = ImColor(219,  92,  92, 255);
     s.breakpoint_hover_color                     = ImColor(219,  92,  92, 100);
+    s.autocompletion_bg_color                    = ImColor( 70,  72,  74, 255);
+    s.autocompletion_selected_bg_color           = ImColor( 46,  67, 110, 255);
     s.token_style[token_type::unknown]           = token_style{ImColor(  0,   0,   0, 255), false, false};
     s.token_style[token_type::keyword]           = token_style{ImColor(210,  40,  58, 255), false, false};
     s.token_style[token_type::comment]           = token_style{ImColor(120, 120, 120, 255), false,  true};
