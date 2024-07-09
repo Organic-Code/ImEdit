@@ -283,7 +283,7 @@ void ImEdit::editor::render() {
     const auto extra_padding = compute_extra_padding();
     const auto region_avail = ImGui::GetContentRegionAvail();
     const ImVec2 draw_region{_width ?
-                                    *_width != 0 ? std::max(_longest_line_px + extra_padding, *_width) : region_avail.x
+                                    *_width != 0 ? std::max(_longest_line_px + extra_padding, *_width) : _longest_line_px + extra_padding
                                     : _longest_line_px + extra_padding,
                              _height ?
                                     *_height != 0 ? *_height : region_avail.y
