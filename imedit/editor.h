@@ -115,6 +115,7 @@ namespace ImEdit {
         void add_cursor(coordinates coords);
         void remove_cursor(coordinates coords);
         void set_cursor(coordinates coords); // Sets a single cursor at given coordinates. Remove other cursors.
+        coordinates get_main_cursor() const noexcept { return _cursors.back().coord; }
 
         // returns the coordinates of the mouse in editor coordinates
         coordinates mouse_position();
@@ -159,7 +160,7 @@ namespace ImEdit {
          */
         void delete_extra_cursors(); // keeps only one cursor
 
-        void add_selection(region r) noexcept;
+        void add_selection(region r) noexcept; // selects an extra region
         void delete_selections(); // delete the contents of every selection
 
         // See _undo_history_size
@@ -260,9 +261,13 @@ namespace ImEdit {
 
         size_t _undo_history_size{200};
 
-        // data is filled by _on_text_typing_data
-        std::function<void(std::any data, coordinates coord, const line& before, const line& current, editor& this_editor)> _on_text_typing{}; // called whenever text is typed (TODO multicursor)
-        std::any _on_text_typing_data;
+        // data change listener
+        // data is filled by _on_data_modified_data
+        std::function<void(std::any data, unsigned int line_idx, const line& before, editor& this_editor)> _on_data_modified_line_changed{}; // called whenever data is changed (text inputted, deleted, autocompleted, ...), on a given line
+        std::function<void(std::any data, region old_region, editor& this_editor)> _on_data_modified_region_deleted{}; // called whenever a region is deleted (selection deletion)
+        std::function<void(std::any data, unsigned int old_line_idx, editor& this_editor)> _on_data_modified_newline_delete{}; // called whenever a '\n' is deleted. May have fused two lines together
+        std::function<void(std::any data, unsigned int new_line_idx, editor& this_editor)> _on_data_modified_new_line{}; // called whenever a '\n' is created. May have split one line into two
+        std::any _on_data_modified_data;
 
 
 
@@ -402,6 +407,7 @@ namespace ImEdit {
         std::vector<std::string> _autocompletion{};
         std::optional<unsigned int> _autocompletion_selection{};
         float _autocompletion_width{};
+        bool _auto_completion_should_take_focus{false};
     };
 }
 

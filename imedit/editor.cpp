@@ -536,7 +536,8 @@ void ImEdit::editor::render() {
         }
 
         // Render cursor
-        if (ImGui::IsWindowFocused() || _tooltip_has_focus || _always_show_cursors) {
+        if (ImGui::IsWindowFocused() || _tooltip_has_focus || _always_show_cursors || !_autocompletion.empty()) {
+            // !_autocompletion.empty == autocompletion menu has focus
             for (cursor &c: _cursors) {
                 if (i == c.coord.line) {
                     auto time = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -691,7 +692,6 @@ void ImEdit::editor::move_cursors_up() {
     IMEDIT_RESTORE_PMC
 }
 
-
 void ImEdit::editor::move_cursors_down() {
     IMEDIT_CALL_PMC(move_cursors_down)
 
@@ -705,6 +705,7 @@ void ImEdit::editor::move_cursors_down() {
 
     IMEDIT_RESTORE_PMC
 }
+
 void ImEdit::editor::move_cursors_left() {
     IMEDIT_CALL_PMC(move_cursors_left)
 
@@ -719,6 +720,7 @@ void ImEdit::editor::move_cursors_left() {
 
     IMEDIT_RESTORE_PMC
 }
+
 void ImEdit::editor::move_cursors_right() {
     IMEDIT_CALL_PMC(move_cursors_right)
 
@@ -734,7 +736,6 @@ void ImEdit::editor::move_cursors_right() {
     IMEDIT_RESTORE_PMC
 }
 
-
 ImEdit::coordinates ImEdit::editor::move_coordinates_up(coordinates coord, unsigned int wanted_column) const noexcept {
     if (coord.line == 0) {
         coord.char_index = 0;
@@ -745,7 +746,6 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_up(coordinates coord, unsig
     coord = coordinates_for(wanted_column, coord.line - 1);
     return coord;
 }
-
 
 ImEdit::coordinates ImEdit::editor::move_coordinates_down(coordinates coord, unsigned int wanted_column) const noexcept {
     if (coord.line == _lines.size() - 1) {
@@ -1626,10 +1626,12 @@ void ImEdit::editor::delete_glyph(coordinates co) {
     }
 
     assert(co.line < _lines.size());
+
     // deleting empty line
     if (_lines[co.line].tokens.empty()) {
         add_line_deletion_record(co);
         _lines.erase(_lines.begin() + co.line);
+        unsigned int line_idx = co.line;
         for (cursor& c : _cursors) {
             if (c.coord.line > co.line) {
                 --c.coord.line;
@@ -1645,6 +1647,10 @@ void ImEdit::editor::delete_glyph(coordinates co) {
                 }
             }
         }
+
+        if (_on_data_modified_newline_delete) {
+            _on_data_modified_newline_delete(_on_data_modified_data, line_idx, *this);
+        }
         return;
     }
 
@@ -1654,6 +1660,7 @@ void ImEdit::editor::delete_glyph(coordinates co) {
 
     // Deleting an equivalent of '\n'
     if (co.token == 0 && co.char_index == 0) {
+        unsigned int line_idx = co.line;
         add_line_deletion_record(move_coordinates_left(co));
         const std::size_t original_line_tok_count = _lines[co.line - 1].tokens.size();
         for (token &tok: _lines[co.line].tokens) {
@@ -1675,8 +1682,14 @@ void ImEdit::editor::delete_glyph(coordinates co) {
             _longest_line_px = length;
             _longest_line_idx = co.line - 1;
         }
+
+        if (_on_data_modified_newline_delete) {
+            _on_data_modified_newline_delete(_on_data_modified_data, line_idx, *this);
+        }
     }
     else { // Deleting a regular glyph
+
+        auto line_before = _lines[co.line];
 
         std::vector<cursor> cursors_copy = _cursors;
         bool token_deleted = false;
@@ -1733,6 +1746,10 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         }
 
         add_char_deletion_record(std::move(deleted_chars), co, token_deleted, cursors_copy);
+
+        if (_on_data_modified_line_changed) {
+            _on_data_modified_line_changed(_on_data_modified_data, co.line, line_before, *this);
+        }
     }
 }
 
@@ -2297,6 +2314,10 @@ void ImEdit::editor::delete_selection(ImEdit::region select) {
             shift_coordinates(_selections[idx].end);
         }
     }
+
+    if (_on_data_modified_region_deleted) {
+        _on_data_modified_region_deleted(_on_data_modified_data, {beg, end}, *this);
+    }
 }
 
 void ImEdit::editor::undo() {
@@ -2608,12 +2629,15 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
 
     clear_search();
     for (cursor& c : _cursors) {
+
         bool created_token = false;
         if (_lines[c.coord.line].tokens.empty()) {
             _lines[c.coord.line].tokens.push_back({"", token_type::unknown});
             created_token = true;
         }
         auto& string = _lines[c.coord.line].tokens[c.coord.token].data;
+
+        auto line_before = _lines[c.coord.line];
 
         // Credits to these if branches: Dear ImGui
         // convert utf16 to utf8
@@ -2666,6 +2690,13 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
             }
         }
         c.coord.char_index += advance;
+
+        if (_on_data_modified_line_changed) {
+            _on_data_modified_line_changed(_on_data_modified_data,
+                                           c.coord.line,
+                                           line_before,
+                                           *this);
+        }
     }
 
     IMEDIT_RESTORE_PMC
@@ -2690,8 +2721,18 @@ void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
         _lines[pos.coord.line].tokens.push_back({"", token_type::unknown});
         created_token = true;
     }
+
+    auto line_before = _lines[pos.coord.line];
+
     _lines[pos.coord.line].tokens[pos.coord.token].data.insert(pos.coord.char_index, 1, ch);
     add_char_addition_record({ch}, pos.coord);
+
+    if (_on_data_modified_line_changed) {
+        _on_data_modified_line_changed(_on_data_modified_data,
+                                       pos.coord.line,
+                                       line_before,
+                                       *this);
+    }
 
     for (cursor& c2 : _cursors) {
         if (pos.coord.line == c2.coord.line && pos.coord.token == c2.coord.token && pos.coord.char_index <= c2.coord.char_index) {
@@ -2739,6 +2780,10 @@ void ImEdit::editor::input_newline() {
         }
         ++c.coord.line;
         c.coord.char_index = c.coord.token = c.wanted_column = 0;
+
+        if (_on_data_modified_new_line) {
+            _on_data_modified_new_line(_on_data_modified_data, c.coord.line, *this);
+        }
     }
 
     IMEDIT_RESTORE_PMC
@@ -2759,6 +2804,10 @@ void ImEdit::editor::input_newline_nomove() {
             if (c2.coord.line > c.coord.line) {
                 ++c2.coord.line;
             }
+        }
+
+        if (_on_data_modified_new_line) {
+            _on_data_modified_new_line(_on_data_modified_data, c.coord.line + 1, *this);
         }
     }
 
@@ -2863,6 +2912,11 @@ void ImEdit::editor::show_breakpoint_window() {
        _breakpoint_window_just_opened = false;
     }
     if (ImGui::Begin("##breakpoint", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+        if (!ImGui::IsWindowFocused()) {
+            ImGui::End();
+            _showing_breakpoint_window = false;
+            return;
+        }
         assert(_breakpoint_window_filler);
         _breakpoint_window_filler(_breakpoint_data, _selected_breakpoint_line, *this);
     }
@@ -2870,9 +2924,22 @@ void ImEdit::editor::show_breakpoint_window() {
 }
 
 void ImEdit::editor::show_autocomplete_window(ImVec2 coords) {
-    coords.y += ImGui::GetTextLineHeightWithSpacing();
+    coords.y += ImGui::GetTextLineHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y;
     ImGui::SetNextWindowPos(coords);
-    if (ImGui::Begin("##autocomplete", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove)) {
+
+    bool just_took_focus = _auto_completion_should_take_focus;
+    if (_auto_completion_should_take_focus) {
+        ImGui::SetNextWindowFocus();
+        _auto_completion_should_take_focus = false;
+    }
+
+    if (ImGui::Begin("##autocomplete", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoBackground)) {
+        if (!ImGui::IsWindowFocused()) {
+            ImGui::End();
+            _autocompletion.clear();
+            return;
+        }
+
         auto draw_list = ImGui::GetWindowDrawList();
         auto cursor = ImGui::GetCursorScreenPos();
 
@@ -2898,6 +2965,10 @@ void ImEdit::editor::show_autocomplete_window(ImVec2 coords) {
 
             cursor.y += ImGui::GetTextLineHeightWithSpacing();
         }
+
+        if (!just_took_focus) {
+            handle_kb_input();
+        }
     }
     ImGui::End();
 }
@@ -2910,6 +2981,7 @@ void ImEdit::editor::set_autocomplete(const std::vector<std::string> &completion
     }
     else {
         _autocompletion_selection = 0;
+        _auto_completion_should_take_focus = true;
     }
 }
 
@@ -2926,10 +2998,12 @@ void ImEdit::editor::auto_complete_or_tab_input() {
                 c.coord.char_index = str.size();
             }
             else {
-                _lines[c.coord.line].tokens[c.coord.token].data = str;
+                _lines[c.coord.line].tokens[c.coord.token].data.erase(0, c.coord.char_index); // TODO need to update other cursors position for
+                _lines[c.coord.line].tokens[c.coord.token].data.insert(0, str);               // TODO           other cursors on the same token
                 c.coord.char_index = str.size();
             }
         }
+        _autocompletion.clear();
         find_longest_line(); // todo don’t call this, compute for modified lines only instead
 
     }
