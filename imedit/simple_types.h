@@ -77,25 +77,27 @@ namespace ImEdit {
         }
     };
 
-    struct token {
-        std::string data{};
+    struct token_view {
         token_type::enum_ type{};
-        unsigned short id{0}; // if two tokens have data, id, and type all set as equal by lexer, selecting one will highlight the other. id == 0: ignored (TODO)
+        unsigned int char_idx{};
+        unsigned int length{};
+        unsigned int id{0}; // if two tokens have type and id set as equal by lexer, selecting one will highlight the other. id == 0: ignored (TODO)
+                            // ID and type are also used to generate the tooltip (if any, once again ignored if id == 0
 
-        bool operator==(const token& other) const noexcept {
-            return id == other.id && type == other.type && data == other.data;
+        bool operator==(const token_view& other) const noexcept {
+            return id == other.id && type == other.type;
         }
     };
 
     struct token_hash {
-        std::size_t operator()(const token& tok) const noexcept {
-            return str_hash(tok.data) >> 8 | static_cast<std::size_t>(tok.id) << (sizeof(std::size_t) * 8 - 8);
+        std::size_t operator()(const token_view& tok) const noexcept {
+            return tok.id;
         }
-        std::hash<std::string> str_hash;
     };
 
     struct line {
-        std::deque<token> tokens{};
+        std::string raw_text{};
+        std::deque<token_view> token_views{};
         std::optional<ImColor> background{};
         bool has_breakpoint{false};
     };
@@ -130,8 +132,7 @@ namespace ImEdit {
 
     struct coordinates {
         unsigned int line{};
-        unsigned int token{};
-        unsigned int char_index{}; // index within the token
+        unsigned int char_index{};
     };
 
     // used to represent coordinates that can be to the left of the glyphs (in the numbers column)
@@ -140,7 +141,7 @@ namespace ImEdit {
 
         [[nodiscard]] coordinates as_default_coords() const noexcept {
             assert(!is_left || char_index == 0);
-            return {line, token, char_index};
+            return {line, char_index};
         }
     };
 

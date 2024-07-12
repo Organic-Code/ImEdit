@@ -241,8 +241,8 @@ namespace ImEdit {
         // When matching token is hovered and _tooltips[token] exists, calls ImGui::BeginTooltip,
         // and either prints the variant’s string, or calls the std::function so that you can draw whatever you wish in the tooltip.
         // Callback is called with _tooltip_data as its first parameter.
-        using tooltip_callback = std::function<void(std::any tooltip_data, const token&)>;
-        std::unordered_map<token, std::variant<std::string, tooltip_callback>, token_hash> _tooltips; // when modifying this, remember to call editor::reset_current_tooltip
+        using tooltip_callback = std::function<void(std::any tooltip_data, const token_view&)>;
+        std::unordered_map<token_view, std::variant<std::string, tooltip_callback>, token_hash> _tooltips; // when modifying this, remember to call editor::reset_current_tooltip
         std::any _tooltip_data{nullptr}; // Passed to tooltip callbacks as user data
         std::chrono::milliseconds _tooltip_delay{std::chrono::seconds(1)}; // Delay before the tooltip appears
         std::chrono::milliseconds _tooltip_grace_period{std::chrono::milliseconds(250)}; // Delay for which the tooltip stays up, even after the mouse went away
@@ -283,6 +283,8 @@ namespace ImEdit {
         [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
         [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
         [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
+
+        [[nodiscard]] unsigned int token_index_for(coordinates coord) const noexcept;
 
     /*************************************************************************************
      *
