@@ -1603,6 +1603,14 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         add_line_deletion_record(move_coordinates_left(co));
         const std::size_t original_line_char_count = _lines[co.line - 1].raw_text.size();
         std::copy(_lines[co.line].raw_text.begin(), _lines[co.line].raw_text.end(), std::back_inserter(_lines[co.line - 1].raw_text));
+
+        // adapting tokens to fit the end of the previous line
+        for (token_view& tok : _lines[co.line].token_views) {
+            tok.char_idx += original_line_char_count;
+        }
+        std::copy(_lines[co.line].token_views.begin(), _lines[co.line].token_views.end(), std::back_inserter(_lines[co.line - 1].token_views));
+
+
         _lines.erase(_lines.begin() + co.line);
 
         for (cursor &c: _cursors) {
@@ -1625,7 +1633,6 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         }
     }
     else { // Deleting a regular glyph
-
         auto line_before = _lines[co.line];
 
         std::vector<cursor> cursors_copy = _cursors;
@@ -1637,6 +1644,19 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         std::string& str = _lines[co.line].raw_text;
         while (co.char_index-- > 0 &&  is_within_utf8(str[co.char_index]));
         const auto char_count = char_count_for_utf8(str[co.char_index]);
+
+        // managing tokens
+        auto token = std::next(_lines[co.line].token_views.begin(), token_index_for(co));
+        token->length -= char_count;
+        if (token->length == 0) {
+            token = _lines[co.line].token_views.erase(token);
+        } else {
+            ++token;
+        }
+        for (; token != _lines[co.line].token_views.end() ; ++token) {
+            token->char_idx -= char_count;
+        }
+
 
         deleted_chars.reserve(char_count);
         for (auto i = 0 ; i < char_count ; ++i) {
@@ -1951,6 +1971,41 @@ void ImEdit::editor::delete_selection(ImEdit::region select) {
     if (beg.line == end.line) {
 
         auto& line = _lines[beg.line];
+        const auto deleted_chars_count = end.char_index - beg.char_index;
+
+        // managing tokens
+        unsigned int beg_tok_idx = token_index_for(beg);
+        unsigned int end_tok_idx = token_index_for(end);
+
+        for (unsigned int i = end_tok_idx + 1; i < _lines[beg.line].token_views.size() ; ++i) {
+            _lines[beg.line].token_views[i].char_idx -= deleted_chars_count;
+        }
+
+        if (beg_tok_idx == end_tok_idx) {
+            line.token_views[beg_tok_idx].length -= deleted_chars_count;
+            if (line.token_views[beg_tok_idx].length == 0) {
+                line.token_views.erase(std::next(line.token_views.begin(), beg_tok_idx));
+            }
+        }
+        else {
+            token_view& end_tok = line.token_views[end_tok_idx];
+            end_tok.length = end_tok.length - (end.char_index - end_tok.char_idx);
+            end_tok.char_idx -= deleted_chars_count - (end.char_index - end_tok.char_idx);
+            if (end_tok.length == 0) {
+                line.token_views.erase(std::next(line.token_views.begin(), end_tok_idx));
+            }
+
+            line.token_views.erase(std::next(line.token_views.begin(), beg_tok_idx + 1), std::next(line.token_views.begin(), end_tok_idx));
+
+            token_view& beg_tok = line.token_views[beg_tok_idx];
+            beg_tok.length = beg.char_index - beg_tok.char_idx;
+            if (beg_tok.length == 0) {
+                line.token_views.erase(std::next(line.token_views.begin(), beg_tok_idx));
+            }
+        }
+
+
+
         line.raw_text.erase(beg.char_index, end.char_index - beg.char_index);
 
         auto shift_coordinates = [&beg, &end](coordinates& coord) {
@@ -1974,12 +2029,45 @@ void ImEdit::editor::delete_selection(ImEdit::region select) {
         sanitize_selections();
 
     } else {
+        // Managing tokens
+        {
+            const auto beg_tok_idx = token_index_for(beg);
+            token_view &beg_tok = _lines[beg.line].token_views[beg_tok_idx];
+            _lines[beg.line].token_views.erase(std::next(_lines[beg.line].token_views.begin(), beg_tok_idx + 1), _lines[beg.line].token_views.end());
+            beg_tok.length = beg.char_index - beg_tok.char_idx;
+            if (beg_tok.length == 0) {
+                _lines[beg.line].token_views.erase(std::next(_lines[beg.line].token_views.begin(), beg_tok_idx));
+            }
+
+            // managing end line tokens in place, they will be copied later.
+            const auto end_tok_idx = token_index_for(end);
+            _lines[end.line].token_views.erase(_lines[end.line].token_views.begin(), std::next(_lines[end.line].token_views.begin(), end_tok_idx));
+            auto token = _lines[end.line].token_views.begin();
+            token->length = token->length - (end.char_index - token->char_idx);
+            token->char_idx = beg.char_index;
+
+            unsigned int next_token_idx = token->char_idx + token->length;
+            if (token->length == 0) {
+                token = _lines[end.line].token_views.erase(token);
+            } else {
+                ++token;
+            }
+            for (; token != _lines[end.line].token_views.end(); ++token) {
+                token->char_idx = next_token_idx;
+                next_token_idx += token->length;
+            }
+        }
+
+
+
+
         _lines[beg.line].raw_text.erase(beg.char_index);
         _lines[end.line].raw_text.erase(0, end.char_index);
         _lines.erase(std::next(_lines.begin(), beg.line + 1), std::next(_lines.begin(), end.line));
 
-        // pasting end line to beg line and deleting end line
+        // pasting end of end line to end of beg line and deleting end line
         std::copy(_lines[beg.line + 1].raw_text.begin(), _lines[beg.line + 1].raw_text.end(), std::back_inserter(_lines[beg.line].raw_text));
+        std::copy(_lines[beg.line + 1].token_views.begin(), _lines[beg.line + 1].token_views.end(), std::back_inserter(_lines[beg.line].token_views));
         _lines.erase(std::next(_lines.begin(), beg.line + 1));
 
         auto shift_coordinates = [&beg, &end](coordinates& coord) {
@@ -2000,14 +2088,16 @@ void ImEdit::editor::delete_selection(ImEdit::region select) {
             shift_coordinates(_selections[idx].end);
         }
     }
+    find_longest_line(); // fixme do not call there, check for modified lines only
 
     if (_on_data_modified_region_deleted) {
         _on_data_modified_region_deleted(_on_data_modified_data, {beg, end}, *this);
     }
+
 }
 
 void ImEdit::editor::undo() {
-    IMEDIT_CALL_PMC(undo)/*
+    IMEDIT_CALL_PMC(undo)
 
     if (_undo_record.empty() || _undo_record_it == _undo_record.begin()) {
         IMEDIT_RESTORE_PMC
@@ -2324,13 +2414,12 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
         auto advance = 0;
         if (ch < 0x80) {
             string.insert(c.coord.char_index, 1, (char) ch);
-            _lines[c.coord.line].token_views[token_index_for(c.coord)].length++;
             add_char_addition_record({(char) ch}, c.coord);
             advance += 1;
         } else if (ch < 0x800) {
             string.insert(c.coord.char_index, 1, (char) (0xC0 + (ch >> 6)));
             string.insert(c.coord.char_index + 1, 1, (char) (0x80 + (ch & 0x3f)));
-            _lines[c.coord.line].token_views[token_index_for(c.coord)].length += 2;
+
             add_char_addition_record({(char) (0xC0 + (ch >> 6)), (char) (0x80 + (ch & 0x3f))}, c.coord);
             advance += 2;
         } else if (ch >= 0xdc00 && ch < 0xe000) {
@@ -2340,7 +2429,7 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
             string.insert(c.coord.char_index + 1, 1, (char) (0x80 + ((ch >> 12) & 0x3f)));
             string.insert(c.coord.char_index + 2, 1, (char) (0x80 + ((ch >> 6) & 0x3f)));
             string.insert(c.coord.char_index + 3, 1, (char) (0x80 + ((ch) & 0x3f)));
-            _lines[c.coord.line].token_views[token_index_for(c.coord)].length += 4;
+
             add_char_addition_record({(char) (0xf0 + (ch >> 18)),
                                       (char) (0x80 + ((ch >> 12) & 0x3f)),
                                       (char) (0x80 + ((ch >> 6) & 0x3f)),
@@ -2352,12 +2441,18 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
             string.insert(c.coord.char_index, 1, (char) (0xe0 + (ch >> 12)));
             string.insert(c.coord.char_index + 1, 1, (char) (0x80 + ((ch >> 6) & 0x3f)));
             string.insert(c.coord.char_index + 2, 1, (char) (0x80 + ((ch) & 0x3f)));
-            _lines[c.coord.line].token_views[token_index_for(c.coord)].length += 3;
+
             add_char_addition_record({(char) (0xe0 + (ch >> 12)),
                                       (char) (0x80 + ((ch >> 6) & 0x3f)),
                                       (char) (0x80 + ((ch) & 0x3f))},
                                      c.coord);
             advance += 3;
+        }
+
+        auto token = std::next(_lines[c.coord.line].token_views.begin(), token_index_for(c.coord));
+        token->length += advance;
+        for (++token ; token != _lines[c.coord.line].token_views.end() ; ++token) {
+            token->char_idx += advance;
         }
 
 
@@ -2400,7 +2495,12 @@ void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
     auto line_before = _lines[pos.coord.line];
 
     _lines[pos.coord.line].raw_text.insert(pos.coord.char_index, 1, ch);
-    _lines[pos.coord.line].token_views[token_index_for(pos.coord)].length++;
+    auto token = std::next(_lines[pos.coord.line].token_views.begin(), token_index_for(pos.coord));
+    token->length++;
+    for (++token; token != _lines[pos.coord.line].token_views.end() ; ++token) {
+        token->char_idx++;
+    }
+
     add_char_addition_record({ch}, pos.coord);
 
     if (_on_data_modified_line_changed) {
@@ -2662,16 +2762,23 @@ void ImEdit::editor::auto_complete_or_tab_input() {
         assert(_autocompletion_selection);
         const std::string& str = _autocompletion[*_autocompletion_selection];
         for (cursor& c : _cursors) {
-            const token_view& tok = _lines[c.coord.line].token_views[token_index_for(c.coord)];
-            _lines[c.coord.line].raw_text.erase(tok.char_idx, c.coord.char_index - tok.char_idx);
-            _lines[c.coord.line].raw_text.insert(tok.char_idx, str);
+            auto token = std::next(_lines[c.coord.line].token_views.begin(), token_index_for(c.coord));
+            _lines[c.coord.line].raw_text.erase(token->char_idx, c.coord.char_index - token->char_idx);
+            _lines[c.coord.line].raw_text.insert(token->char_idx, str);
+
+            assert(static_cast<int>(str.size()) > 0);
+            int length_change = static_cast<int>(str.size()) - (c.coord.char_index - token->char_idx); // NOLINT(*-narrowing-conversions)
+            token->length += length_change;
+            for (++token ; token != _lines[c.coord.line].token_views.end() ; ++token) {
+                token->char_idx += length_change;
+            }
 
             for (cursor& c2 : _cursors) {
                 if (c2.coord.line == c.coord.line && c2.coord.char_index > c.coord.char_index) {
-                    c2.coord.char_index += str.size() - (c.coord.char_index - tok.char_idx);
+                    c2.coord.char_index += length_change;
                 }
             }
-            c.coord.char_index += str.size() - (c.coord.char_index - tok.char_idx);
+            c.coord.char_index += length_change;
         }
         _autocompletion.clear();
         find_longest_line(); // todo don’t call this, compute for modified lines only instead
