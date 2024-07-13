@@ -278,9 +278,6 @@ namespace ImEdit {
      * Utilities methods. Those do not call _public_methods_callback
      *
      */
-        [[nodiscard]] bool coordinates_eq(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_lt(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
         [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
         [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
 
@@ -311,18 +308,9 @@ namespace ImEdit {
 
         [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos) const;
 
-        [[nodiscard]] simple_coord to_simple_coords(coordinates) const noexcept;
-        [[nodiscard]] std::vector<simple_coord> cursors_as_simple() const;
-        [[nodiscard]] std::vector<simple_coord> cursors_as_simple(const std::vector<cursor>& cursors) const;
-        [[nodiscard]] std::vector<simple_region> selections_as_simple() const;
-        [[nodiscard]] coordinates from_simple_coords(simple_coord) const noexcept;
-        [[nodiscard]] static coordinates from_simple_coords_within(simple_coord, const line&) noexcept;
-        [[nodiscard]] std::vector<cursor> cursors_from_simple(const std::vector<simple_coord>&) const;
-        [[nodiscard]] std::vector<region> selections_from_simple(const std::vector<simple_region>&) const;
-
-        [[nodiscard]] region sorted_region(region) const noexcept;
-        [[nodiscard]] coordinates& greater_coordinates_of(region&) const noexcept;
-        [[nodiscard]] coordinates& smaller_coordinates_of(region&) const noexcept;
+        [[nodiscard]] static region sorted_region(region) noexcept;
+        [[nodiscard]] static coordinates& greater_coordinates_of(region&) noexcept;
+        [[nodiscard]] static coordinates& smaller_coordinates_of(region&) noexcept;
 
         void delete_selection(region select); // Does NOT remove select from _selections
 

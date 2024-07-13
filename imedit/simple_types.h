@@ -133,6 +133,32 @@ namespace ImEdit {
     struct coordinates {
         unsigned int line{};
         unsigned int char_index{};
+
+        bool operator<(const coordinates& rhs) const noexcept {
+            return line < rhs.line || line == rhs.line && char_index < rhs.char_index;
+        }
+
+        bool operator<=(const coordinates& rhs) const noexcept {
+            return line < rhs.line || line == rhs.line && char_index <= rhs.char_index;
+        }
+
+        bool operator!=(const coordinates& rhs) const noexcept {
+            return line != rhs.line || char_index != rhs.char_index;
+        }
+
+        bool operator==(const coordinates& rhs) const noexcept {
+            return !(*this != rhs);
+        }
+
+
+        bool operator>(const coordinates& rhs) const noexcept {
+            return rhs < *this;
+        }
+
+        bool operator>=(const coordinates& rhs) const noexcept {
+            return rhs <= *this;
+        }
+
     };
 
     // used to represent coordinates that can be to the left of the glyphs (in the numbers column)
@@ -145,12 +171,6 @@ namespace ImEdit {
         }
     };
 
-    // used for records, as tokenizer can fiddle with tokens
-    struct simple_coord {
-        unsigned int line{};
-        unsigned int char_index{};
-    };
-
     struct cursor {
         coordinates coord{};
         unsigned int wanted_column{}; // where the cursor wishes to be at (can be more to the right than possible on a given line)
@@ -159,11 +179,6 @@ namespace ImEdit {
     struct region {
         coordinates beg{};
         coordinates end{};
-    };
-
-    struct simple_region {
-        simple_coord beg{};
-        simple_coord end{};
     };
 
     struct input {
@@ -183,54 +198,54 @@ namespace ImEdit {
 
         // cursor positions
         struct cursor_position {
-            std::vector<simple_region> selections;
-            std::vector<simple_coord> positions;
+            std::vector<region> selections;
+            std::vector<coordinates> positions;
         };
 
         // char deletion
         struct chars_deletion {
             std::vector<std::vector<char>> deleted_chars;
-            std::vector<simple_coord> delete_location;
+            std::vector<coordinates> delete_location;
 
-            std::vector<simple_coord> cursors_coords;
+            std::vector<coordinates> cursors_coords;
         };
 
         // char addition
         struct chars_addition {
             std::vector<std::vector<char>> added_chars;
-            std::vector<simple_coord> add_location;
+            std::vector<coordinates> add_location;
 
-            std::vector<simple_coord> cursors_coords;
+            std::vector<coordinates> cursors_coords;
         };
 
         // new line
         struct new_line {
-            simple_coord new_line_location;
+            coordinates new_line_location;
 
-            std::vector<simple_coord> cursors_coords;
+            std::vector<coordinates> cursors_coords;
         };
 
         // line deletion
         struct del_line {
-            simple_coord line_deletion_location;
+            coordinates line_deletion_location;
 
-            std::vector<simple_coord> cursors_coords;
+            std::vector<coordinates> cursors_coords;
         };
 
         // selection deletion
         struct del_selection {
             std::vector<line> deleted_selections;
-            simple_region selection_location;
+            region selection_location;
 
-            std::vector<simple_coord> cursors_coords;
+            std::vector<coordinates> cursors_coords;
         };
 
         // pasting
         struct paste {
-            std::vector<simple_coord> coordinates;
+            std::vector<coordinates> coordinates;
             std::string data;
 
-            std::vector<simple_coord> cursors_coords;
+            std::vector<coordinates> cursors_coords;
         };
 
         std::variant<

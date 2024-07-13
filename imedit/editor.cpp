@@ -125,7 +125,7 @@ namespace {
         return char_count_for_utf8(static_cast<char>(beg));
     }
 
-    std::size_t utf8_string_size(const std::string& str) {
+    std::size_t utf8_string_size(std::string_view str) {
         std::size_t char_count = 0;
         for (unsigned int i = 0 ; i < str.size() ; i += char_count_for_utf8(str[i])) {
             ++char_count;
@@ -176,7 +176,7 @@ char ImEdit::editor::iterator::operator*() const noexcept {
 }
 
 bool ImEdit::editor::iterator::operator==(const ImEdit::editor::iterator &other) const noexcept {
-    return ed == other.ed && ed->coordinates_eq(current, other.current);
+    return ed == other.ed && current == other.current;
 }
 
 bool ImEdit::editor::iterator::operator!=(const ImEdit::editor::iterator &other) const noexcept {
@@ -593,7 +593,7 @@ void ImEdit::editor::render() {
 }
 
 void ImEdit::editor::render_region_line(region r, unsigned int current_line, ImVec2 draw_region, ImVec2 imgui_cursor, ImColor fill, ImColor outline) noexcept {
-    if (coordinates_eq(r.beg, r.end)) {
+    if (r.beg == r.end) {
         return;
     }
 
@@ -601,7 +601,7 @@ void ImEdit::editor::render_region_line(region r, unsigned int current_line, ImV
     imgui_cursor.y -= (ImGui::GetTextLineHeightWithSpacing() - glyph_size().y) / 2;
 
     coordinates min, max;
-    if (coordinates_lt(r.beg, r.end)) {
+    if (r.beg < r.end) {
         min = r.beg;
         max = r.end;
     } else {
@@ -885,7 +885,6 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_right(coordinates coord) co
         return coord;
     }
 
-    // End of token: moving to next token, after first glyph
     if (coord.line < _lines.size() - 1) {
         ++coord.line;
         coord.char_index = 0;
@@ -1093,7 +1092,7 @@ void ImEdit::editor::selection_begfile() {
     _cursor_moved_by_action_since_last_record = true;
     coordinates max = {0,0};
     for (const cursor& c : _cursors) {
-        if (coordinates_lt(max, c.coord)) {
+        if (max < c.coord) {
             max = c.coord;
         }
     }
@@ -1111,13 +1110,12 @@ void ImEdit::editor::selection_endfile() {
     _cursor_moved_by_action_since_last_record = true;
     coordinates end_coord;
     if (!_lines.empty()) {
-        if (_lines.back().tokens.empty()) {
-            end_coord = {static_cast<unsigned int>(_lines.size() - 1), 0, 0};
+        if (_lines.back().raw_text.empty()) {
+            end_coord = {static_cast<unsigned int>(_lines.size() - 1), 0};
         } else {
             end_coord = {
                     static_cast<unsigned int>(_lines.size() - 1),
-                    static_cast<unsigned int>(_lines.back().tokens.size() - 1),
-                    static_cast<unsigned int>(_lines.back().tokens.back().data.size())};
+                    static_cast<unsigned int>(_lines.back().raw_text.size())};
         }
     } else {
         IMEDIT_RESTORE_PMC
@@ -1125,7 +1123,7 @@ void ImEdit::editor::selection_endfile() {
     }
     auto min = end_coord;
     for (const cursor& c : _cursors) {
-        if (coordinates_lt(c.coord, min)) {
+        if (c.coord < min) {
             min = c.coord;
         }
     }
@@ -1138,34 +1136,34 @@ void ImEdit::editor::selection_endfile() {
 }
 
 void ImEdit::editor::toggle_selection(ImEdit::region r) {
-    if (coordinates_eq(r.beg, r.end)) {
+    if (r.beg == r.end) {
         return;
     }
-    assert(coordinates_lt(r.beg, r.end));
+    assert(r.beg < r.end);
 
     for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
         // selection with mouse grabbing does not ensure .beg < .end
         auto r2 = sorted_region(_selections[i]);
 
         if (coordinates_within_ex(r.beg, r2) || coordinates_within_ex(r.end, r2)) {
-            if (coordinates_eq(r2.end, r.end)) {
+            if (r2.end == r.end) {
                 greater_coordinates_of(_selections[i]) = r.beg;
             }
-            else if (coordinates_eq(r2.beg, r.beg)) {
+            else if (r2.beg == r.beg) {
                 smaller_coordinates_of(_selections[i]) = r.end;
             }
             else {
-                if (coordinates_lt(r.beg, r2.beg)) {
+                if (r.beg < r2.beg) {
                     smaller_coordinates_of(_selections[i]) = r.beg;
                 }
-                if (coordinates_lt(r2.end, r.end)) {
+                else {
                     greater_coordinates_of(_selections[i]) = r.end;
                 }
             }
             return;
         }
-        else if (coordinates_eq(r.beg, r2.beg)) {
-            if (coordinates_eq(r.end, r2.end)) {
+        else if (r.beg == r2.beg) {
+            if (r.end == r2.end) {
                 _selections.erase(std::next(_selections.begin(), i));
                 return;
             }
@@ -1174,11 +1172,11 @@ void ImEdit::editor::toggle_selection(ImEdit::region r) {
                 return;
             }
         }
-        else if (coordinates_eq(r.end, r2.end)) {
+        else if (r.end == r2.end) {
             greater_coordinates_of(_selections[i]) = r.beg;
             return;
         }
-        else if (coordinates_eq(r.end, r2.beg)) {
+        else if (r.end == r2.beg) {
             smaller_coordinates_of(_selections[i]) = r.beg;
             return;
         }
@@ -1217,47 +1215,24 @@ void ImEdit::editor::delete_previous_token() {
 }
 
 unsigned int ImEdit::editor::column_count_to(ImEdit::coordinates coord) const noexcept {
-    if (coord.token == 0 && coord.char_index == 0) {
+    if (coord.char_index == 0) {
         return 0;
     }
 
     assert(coord.line < _lines.size());
-    if (coord.token == 0 && _lines[coord.line].tokens.empty()) {
-        return 0;
-    }
-
-    assert(coord.token < _lines[coord.line].tokens.size());
-    assert(coord.char_index <= _lines[coord.line].tokens[coord.token].data.size());
+    assert(coord.char_index <= _lines[coord.line].raw_text.size());
 
     unsigned int glyph_count = 0;
-    for (unsigned int i = 0 ; i < coord.token; ++i) {
-        const token& tok = _lines[coord.line].tokens[i];
-
-        if (tok.type == token_type::blank) {
-            for (auto c : tok.data) {
-                if (c == '\t') {
-                    glyph_count += _tab_length - glyph_count % _tab_length;
-                } else {
-                    ++glyph_count;
-                }
-            }
-        } else {
-            glyph_count += utf8_string_size(_lines[coord.line].tokens[i].data);
+    const std::string& line = _lines[coord.line].raw_text;
+    for (unsigned int i = 0 ; i < coord.char_index; i += char_count_for_utf8(line[i])) {
+        if (line[i] == '\t') {
+            glyph_count += _tab_length - glyph_count % _tab_length;
+        }
+        else {
+            ++glyph_count;
         }
     }
 
-    const token& tok = _lines[coord.line].tokens[coord.token];
-    if (tok.type == token_type::blank) {
-        for (unsigned int i = 0 ; i < coord.char_index ; ++i) {
-            if (tok.data[i] == '\t') {
-                glyph_count += _tab_length - glyph_count % _tab_length;
-            } else {
-                ++glyph_count;
-            }
-        }
-    } else {
-        glyph_count += utf8_string_size(tok.data.substr(0, coord.char_index));
-    }
     return glyph_count;
 }
 
@@ -1266,27 +1241,28 @@ ImEdit::coordinates ImEdit::editor::coordinates_for(unsigned int column_count, u
 
     coordinates coord;
     coord.line = line;
-    coord.token = 0;
     coord.char_index = 0;
 
-    if (_lines[coord.line].tokens.empty()) {
+    if (_lines[coord.line].raw_text.empty()) {
         return coord;
     }
 
-    auto is_last_glyph = [this](coordinates coord) {
-        return coord.token == _lines[coord.line].tokens.size() - 1
-                && coord.char_index == _lines[coord.line].tokens[coord.token].data.size();
-    };
-
-    while (column_count_to(coord) < column_count && !is_last_glyph(coord)) {
-        coord = move_coordinates_right(coord);
+    const auto& str = _lines[coord.line].raw_text;
+    unsigned int current_col_count = 0;
+    while (current_col_count < column_count && coord.char_index < str.size()) {
+        if (str[coord.char_index] == '\t') {
+            ++coord.char_index;
+            current_col_count += _tab_length - current_col_count % _tab_length;
+        } else {
+            coord.char_index += char_count_for_utf8(str[coord.char_index]);
+            ++current_col_count;
+        }
     }
 
-    auto& str = _lines[coord.line].tokens[coord.token].data;
     if (coord.char_index != 0 && str[coord.char_index - 1] == '\t') {
         auto actual_tab_length = _tab_length - column_count % _tab_length;
         if (actual_tab_length != _tab_length && actual_tab_length >= _tab_length / 2) {
-            while (coord.char_index-- > 0 &&  is_within_utf8(_lines[coord.line].tokens[coord.token].data[coord.char_index]));
+            while (coord.char_index-- > 0 &&  is_within_utf8(str[coord.char_index]));
         }
     }
 
@@ -1304,7 +1280,7 @@ void ImEdit::editor::sanitize_cursors() {
         auto to_erase = _cursors.end();
         for (auto it = _cursors.begin() ; it != _cursors.end() && to_erase == _cursors.end() ; ++it) {
             for (auto it2 = std::next(it) ; it2 != _cursors.end() ; ++it2) {
-                if (coordinates_eq(it->coord, it2->coord)) {
+                if (it->coord == it2->coord) {
                     to_erase = it;
                     break;
                 }
@@ -1382,7 +1358,7 @@ void ImEdit::editor::sanitize_selections() {
         }
 
         if (perform_merge) {
-            if (coordinates_lt_eq(_selections[first].end, _selections[second].end)) {
+            if (_selections[first].end <= _selections[second].end) {
                 _selections[first].end = _selections[second].end;
             } else {
                 _selections[second].end = _selections[first].end;
@@ -1394,9 +1370,9 @@ void ImEdit::editor::sanitize_selections() {
 
     for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
         bool delete_it = true;
-        if (!coordinates_eq(_selections[i].beg, _selections[i].end)) {
+        if (_selections[i].beg != _selections[i].end) {
             for (const cursor &c: _cursors) {
-                if (coordinates_eq(c.coord, _selections[i].beg) || coordinates_eq(c.coord, _selections[i].end)) {
+                if (c.coord == _selections[i].beg || c.coord == _selections[i].end) {
                     delete_it = false;
                     break;
                 }
@@ -1411,8 +1387,7 @@ void ImEdit::editor::sanitize_selections() {
 
 void ImEdit::editor::add_cursor(coordinates coords) {
     assert(coords.line < _lines.size());
-    assert(coords.token < _lines[coords.line].tokens.size());
-    assert(coords.char_index <= _lines[coords.line].tokens[coords.token].data.size());
+    assert(coords.char_index <= _lines[coords.line].raw_text.size());
 
     add_cursor_undo_record();
     _cursors.push_back({coords, column_count_to(coords)});
@@ -1425,7 +1400,7 @@ void ImEdit::editor::remove_cursor(coordinates coords) {
 
     auto cursor_it = _cursors.end();
     for (auto it = _cursors.begin() ; it != _cursors.end() ; ++it) {
-        if (coordinates_eq(coords, it->coord)) {
+        if (coords == it->coord) {
             cursor_it = it;
             break;
         }
@@ -1442,8 +1417,7 @@ void ImEdit::editor::remove_cursor(coordinates coords) {
 
 void ImEdit::editor::set_cursor(coordinates coords) {
     assert(coords.line < _lines.size());
-    assert(_lines[coords.line].tokens.empty() || coords.token < _lines[coords.line].tokens.size());
-    assert(_lines[coords.line].tokens.empty() || coords.char_index <= _lines[coords.line].tokens[coords.token].data.size());
+    assert(coords.char_index <= _lines[coords.line].raw_text.size());
 
     _cursors.clear();
     _cursors.push_back({coords, column_count_to(coords)});
@@ -1463,14 +1437,14 @@ void ImEdit::editor::delete_extra_cursors() {
 
 bool ImEdit::editor::has_cursor(ImEdit::coordinates coords) {
     return std::any_of(_cursors.begin(), _cursors.end(), [this, &coords](const cursor& c) {
-        return coordinates_eq(coords, c.coord);
+        return coords == c.coord;
     });
 }
 
 ImEdit::coordinates ImEdit::editor::mouse_position() {
     coordinates_cbl cbl = screen_to_token_coordinates(ImGui::GetMousePos());
     if (cbl.is_left) {
-        cbl.token = cbl.char_index = 0;
+        cbl.char_index = 0;
     }
     return cbl.as_default_coords();
 }
@@ -1515,7 +1489,7 @@ void ImEdit::editor::find_longest_line() {
 }
 
 float ImEdit::editor::calc_line_size(unsigned int line) const noexcept {
-    if (_lines[line].tokens.empty()) {
+    if (_lines[line].raw_text.empty()) {
         return 0;
     }
 
@@ -1523,8 +1497,7 @@ float ImEdit::editor::calc_line_size(unsigned int line) const noexcept {
 
     coordinates c;
     c.line = line;
-    c.token = _lines[line].tokens.size() - 1;
-    c.char_index = _lines[line].tokens.back().data.size();
+    c.char_index = _lines[line].raw_text.size();
 
     return static_cast<float>(column_count_to(c)) * space_size;
 }
@@ -1590,14 +1563,14 @@ void ImEdit::editor::handle_kb_input() {
 void ImEdit::editor::delete_glyph(coordinates co) {
     // TODO call lexer, also with previous data
     // nothing to delete
-    if (co.token == 0 && co.char_index == 0 && co.line == 0) {
+    if (co.char_index == 0 && co.line == 0) {
         return;
     }
 
     assert(co.line < _lines.size());
 
     // deleting empty line
-    if (_lines[co.line].tokens.empty()) {
+    if (_lines[co.line].raw_text.empty()) {
         add_line_deletion_record(co);
         _lines.erase(_lines.begin() + co.line);
         unsigned int line_idx = co.line;
@@ -1607,12 +1580,10 @@ void ImEdit::editor::delete_glyph(coordinates co) {
 
             } else if (c.coord.line == co.line) {
                 --c.coord.line;
-                if (_lines[c.coord.line].tokens.empty()) {
-                    c.coord.token = 0;
+                if (_lines[c.coord.line].raw_text.empty()) {
                     c.coord.char_index = 0;
                 } else {
-                    c.coord.token = _lines[c.coord.line].tokens.size() - 1;
-                    c.coord.char_index = _lines[c.coord.line].tokens.back().data.size();
+                    c.coord.char_index = _lines[c.coord.line].raw_text.size();
                 }
             }
         }
@@ -1624,23 +1595,20 @@ void ImEdit::editor::delete_glyph(coordinates co) {
     }
 
 
-    assert(co.token < _lines[co.line].tokens.size());
-    assert(co.char_index <= _lines[co.line].tokens[co.token].data.size());
+    assert(co.char_index <= _lines[co.line].raw_text.size());
 
     // Deleting an equivalent of '\n'
-    if (co.token == 0 && co.char_index == 0) {
+    if (co.char_index == 0) {
         unsigned int line_idx = co.line;
         add_line_deletion_record(move_coordinates_left(co));
-        const std::size_t original_line_tok_count = _lines[co.line - 1].tokens.size();
-        for (token &tok: _lines[co.line].tokens) {
-            _lines[co.line - 1].tokens.emplace_back(std::move(tok));
-        }
+        const std::size_t original_line_char_count = _lines[co.line - 1].raw_text.size();
+        std::copy(_lines[co.line].raw_text.begin(), _lines[co.line].raw_text.end(), std::back_inserter(_lines[co.line - 1].raw_text));
         _lines.erase(_lines.begin() + co.line);
 
         for (cursor &c: _cursors) {
             if (c.coord.line == co.line) {
                 --c.coord.line;
-                c.coord.token += original_line_tok_count;
+                c.coord.char_index += original_line_char_count;
             } else if (c.coord.line > co.line) {
                 --c.coord.line;
             }
@@ -1665,14 +1633,8 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         std::vector<char> deleted_chars{};
 
         const auto deleted_coord = co;
-        if (co.char_index == 0) {
-            assert(co.token > 0);
-            --co.token;
-            co.char_index = _lines[co.line].tokens[co.token].data.size();
-            assert(co.char_index != 0 && "Sumbled upon an empty token. This should never happen, please check your lexer.");
-        }
 
-        auto& str = _lines[co.line].tokens[co.token].data;
+        std::string& str = _lines[co.line].raw_text;
         while (co.char_index-- > 0 &&  is_within_utf8(str[co.char_index]));
         const auto char_count = char_count_for_utf8(str[co.char_index]);
 
@@ -1680,33 +1642,11 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         for (auto i = 0 ; i < char_count ; ++i) {
             deleted_chars.push_back(str[co.char_index + i]);
         }
-        str.erase(co.char_index, char_count_for_utf8(str[co.char_index]));
+        str.erase(co.char_index, char_count);
 
         for (cursor& cursor : _cursors) {
-            if (cursor.coord.line == deleted_coord.line && cursor.coord.token == deleted_coord.token) {
-                if (cursor.coord.char_index >= deleted_coord.char_index && cursor.coord.char_index != 0) {
-                    cursor.coord.char_index -= char_count;
-                }
-            }
-        }
-
-        // Deleting token if empty
-        if (_lines[co.line].tokens[co.token].data.empty()) {
-            token_deleted = true;
-            _lines[co.line].tokens.erase(_lines[co.line].tokens.begin() + co.token);
-
-            for (cursor& cursor : _cursors) {
-                if (cursor.coord.line == co.line) {
-                    if (cursor.coord.token == co.token) {
-                        // Moving cursor away from current token (that was deleted) while keeping it at the same position
-                        if (cursor.coord.token != 0 || cursor.coord.char_index != 0) {
-                            cursor.coord = move_coordinates_right(move_coordinates_left(cursor.coord));
-                        }
-
-                    } else if (cursor.coord.token > co.token) {
-                        --cursor.coord.token;
-                    }
-                }
+            if (cursor.coord.line == co.line && cursor.coord.char_index > co.char_index) {
+                cursor.coord.char_index -= char_count;
             }
         }
 
@@ -1734,7 +1674,7 @@ void ImEdit::editor::handle_mouse_input() {
     }
 
     if (mouse_coord.is_left) {
-        mouse_coord.token = mouse_coord.char_index = 0;
+        mouse_coord.char_index = 0;
     }
 
     if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.1f) && _last_frame_mouse_coords && !_last_frame_mouse_coords->is_left) {
@@ -1769,10 +1709,10 @@ void ImEdit::editor::handle_mouse_input() {
 
         if (!mouse_coord.is_left) {
             coordinates coord = mouse_coord.as_default_coords();
-            coordinates sel_beg = coord;
-            sel_beg.char_index = 0;
-            coordinates sel_end = coord;
-            sel_end.char_index = _lines[sel_end.line].tokens[sel_end.token].data.size();
+            const token_view& tok = _lines[coord.line].token_views[token_index_for(coord)];
+
+            coordinates sel_beg = {coord.line, tok.char_idx};
+            coordinates sel_end = {coord.line, tok.char_idx + tok.length};
 
             cursor cursor{sel_end, column_count_to(sel_end)};
             if (!ctrl) {
@@ -1785,7 +1725,7 @@ void ImEdit::editor::handle_mouse_input() {
 
                 bool cursor_exists{false};
                 for (const auto &c: _cursors) {
-                    if (coordinates_eq(c.coord, cursor.coord)) {
+                    if (c.coord == cursor.coord) {
                         cursor_exists = true;
                         break;
                     }
@@ -1819,7 +1759,7 @@ void ImEdit::editor::handle_mouse_input() {
             coordinates coord = mouse_coord.as_default_coords();
 
             auto it = std::find_if(_cursors.begin(), _cursors.end(), [this, &coord](const cursor &cursor) {
-                return coordinates_eq(cursor.coord, coord);
+                return cursor.coord == coord;
             });
             if (it == _cursors.end()) {
                 bool is_within_selection = false;
@@ -1870,16 +1810,11 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
 
     if (pos.x < 0) {
         coords.is_left = true;
-        coords.token = 0;
         coords.char_index = static_cast<unsigned int>(std::round(-pos.x / glyph_size.x));
         return coords;
     }
     auto base_coords = coordinates_for(static_cast<unsigned>(std::round(pos.x / glyph_size.x)), line);
-
-
-    coords.token = base_coords.token;
     coords.char_index = base_coords.char_index;
-
     return coords;
 }
 
@@ -1887,76 +1822,6 @@ ImEdit::coordinates_cbl ImEdit::editor::screen_to_token_coordinates(ImVec2 pos) 
 float ImEdit::editor::compute_extra_padding() const noexcept {
     auto glyph_length = glyph_size().x;
     return _lines.empty() ? 5 * glyph_length : std::floor(std::log10(static_cast<float>(_lines.size())) + 4) * glyph_length;
-}
-
-bool ImEdit::editor::coordinates_eq(coordinates lhs, coordinates rhs) const noexcept {
-    if (lhs.line != rhs.line) {
-        return false;
-    }
-
-    if (lhs.token == rhs.token) {
-        if (lhs.char_index == rhs.char_index) {
-            return true;
-        }
-        return false;
-
-    } else {
-        // adjacent tokens: if left token is the end of token, right is at idx 0 -> coordinates are still equal
-        if (lhs.token > rhs.token) {
-            std::swap(lhs, rhs);
-        }
-
-        if (lhs.token + 1 != rhs.token) {
-            return false;
-        }
-
-        if (lhs.char_index == _lines[lhs.line].tokens[lhs.token].data.size() && rhs.char_index == 0) {
-            return true;
-        }
-        return false;
-    }
-}
-
-bool ImEdit::editor::coordinates_lt(coordinates lhs, coordinates rhs) const noexcept {
-    if (lhs.line < rhs.line) {
-        return true;
-    }
-    if (lhs.line > rhs.line) {
-        return false;
-    }
-
-    // same line
-
-    if (lhs.token < rhs.token) {
-        // need to check if same position, lhs on the end of their token and rhs on the start of their token, with lhs next to rhs
-        if (lhs.token + 1 != rhs.token) {
-            return true;
-        }
-        else {
-            if (lhs.char_index == _lines[lhs.line].tokens[lhs.token].data.size() && rhs.char_index == 0) {
-                return false;
-            }
-            else {
-                return true;
-            }
-        }
-    }
-    if (lhs.token > rhs.token) {
-        return false;
-    }
-
-    // same token
-
-    if (lhs.char_index < rhs.char_index) {
-        return true;
-    }
-    else {
-        return false;
-    }
-}
-
-bool ImEdit::editor::coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept {
-    return coordinates_lt(lhs, rhs) || coordinates_eq(lhs, rhs);
 }
 
 ImVec2 ImEdit::editor::glyph_size() const noexcept {
@@ -1972,7 +1837,7 @@ void ImEdit::editor::add_selection(region r) noexcept {
     _cursor_moved_by_action_since_last_record = true;
     add_cursor_undo_record();
     _cursors.push_back({r.end, column_count_to(r.end)});
-    if (coordinates_lt(r.end, r.beg)) {
+    if (r.end < r.beg) {
         std::swap(r.beg, r.end);
     }
     _selections.emplace_back(r);
@@ -1986,17 +1851,17 @@ ImVec2 ImEdit::editor::calc_text_size(const char *text, const char *text_end) no
 }
 
 bool ImEdit::editor::coordinates_within(ImEdit::coordinates coord, ImEdit::region r) const noexcept {
-    if (coordinates_lt(r.end, r.beg)) {
+    if (r.end < r.beg) {
         std::swap(r.end, r.beg);
     }
-    return coordinates_lt_eq(r.beg, coord) && coordinates_lt_eq(coord, r.end);
+    return coord >= r.beg && coord <= r.end;
 }
 
 bool ImEdit::editor::coordinates_within_ex(ImEdit::coordinates coord, ImEdit::region r) const noexcept {
-    if (coordinates_lt(r.end, r.beg)) {
+    if (r.end < r.beg) {
         std::swap(r.end, r.beg);
     }
-    return coordinates_lt(r.beg, coord) && coordinates_lt(coord, r.end);
+    return coord > r.beg && coord < r.end;
 }
 
 unsigned int ImEdit::editor::token_index_for(ImEdit::coordinates coord) const noexcept {
@@ -2011,102 +1876,22 @@ unsigned int ImEdit::editor::token_index_for(ImEdit::coordinates coord) const no
     return _lines[coord.line].token_views.size() - 1;
 }
 
-ImEdit::simple_coord ImEdit::editor::to_simple_coords(coordinates co) const noexcept {
-    assert(co.line < _lines.size());
-
-    simple_coord value;
-    value.line = co.line;
-    value.char_index = 0;
-    for (unsigned int i = 0 ; i < co.token ; ++i) {
-        value.char_index += _lines[co.line].tokens[i].data.size();
-    }
-    value.char_index += co.char_index;
-    return value;
-}
-
-std::vector<ImEdit::simple_coord> ImEdit::editor::cursors_as_simple() const {
-    return cursors_as_simple(_cursors);
-}
-
-std::vector<ImEdit::simple_coord> ImEdit::editor::cursors_as_simple(const std::vector<cursor>& cursors) const {
-    std::vector<simple_coord> vals;
-    vals.reserve(cursors.size());
-    for (const cursor& c : cursors) {
-        vals.emplace_back(to_simple_coords(c.coord));
-    }
-    return vals;
-}
-
-std::vector<ImEdit::simple_region> ImEdit::editor::selections_as_simple() const {
-    std::vector<simple_region> vals;
-    vals.reserve(_selections.size());
-    for (const region& s : _selections) {
-        vals.push_back({to_simple_coords(s.beg), to_simple_coords(s.end)});
-    }
-    return vals;
-}
-
-ImEdit::coordinates ImEdit::editor::from_simple_coords(simple_coord co) const noexcept {
-    assert(co.line < _lines.size());
-    return from_simple_coords_within(co, _lines[co.line]);
-}
-
-ImEdit::coordinates ImEdit::editor::from_simple_coords_within(simple_coord co, const line& line) noexcept {
-    coordinates value;
-    value.line = co.line;
-    // dealing with empty lines
-    if (co.char_index == 0) {
-        value.token = value.char_index = 0;
-        return value;
-    }
-
-    value.token = 0;
-    value.char_index = co.char_index;
-    while (value.char_index > line.tokens[value.token].data.size()) {
-        value.char_index -= line.tokens[value.token].data.size();
-        ++value.token;
-        assert(value.token < line.tokens.size());
-    }
-    return value;
-}
-
-std::vector<ImEdit::cursor> ImEdit::editor::cursors_from_simple(const std::vector<simple_coord>& in) const {
-    std::vector<cursor> vals;
-    vals.reserve(in.size());
-    for (const simple_coord& c : in) {
-        auto coord = from_simple_coords(c);
-        vals.push_back({coord, column_count_to(coord)});
-    }
-    return vals;
-}
-
-std::vector<ImEdit::region> ImEdit::editor::selections_from_simple(const std::vector<simple_region>& in) const {
-    std::vector<region> vals;
-    vals.reserve(in.size());
-    for (const simple_region& r : in) {
-        auto beg = from_simple_coords(r.beg);
-        auto end = from_simple_coords(r.end);
-        vals.push_back({beg, end});
-    }
-    return vals;
-}
-
-ImEdit::region ImEdit::editor::sorted_region(region r) const noexcept {
-    if (coordinates_lt(r.beg, r.end)) {
+ImEdit::region ImEdit::editor::sorted_region(region r) noexcept {
+    if (r.beg < r.end) {
         return r;
     }
     return {r.end, r.beg};
 }
 
-ImEdit::coordinates& ImEdit::editor::greater_coordinates_of(region& r) const noexcept {
-    if (coordinates_lt(r.beg, r.end)) {
+ImEdit::coordinates& ImEdit::editor::greater_coordinates_of(region& r) noexcept {
+    if (r.beg < r.end) {
         return r.end;
     }
     return r.beg;
 }
 
-ImEdit::coordinates& ImEdit::editor::smaller_coordinates_of(region& r) const noexcept {
-    if (coordinates_lt(r.beg, r.end)) {
+ImEdit::coordinates& ImEdit::editor::smaller_coordinates_of(region& r) noexcept {
+    if (r.beg < r.end) {
         return r.beg;
     }
     return r.end;
@@ -2151,14 +1936,14 @@ void ImEdit::editor::delete_selection(ImEdit::region select) {
         if (coordinates_within(_cursors[i].coord, select)) {
             _cursors[i].coord = beg;
         }
-        else if (coordinates_lt(end, _cursors[i].coord)) {
+        else if (_cursors[i].coord > end) {
             cursor_needs_move.emplace_back(i);
         }
     }
 
     std::vector<unsigned int> selections_need_move;
     for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
-        if (coordinates_lt(select.end, _selections[i].beg)) {
+        if (_selections[i].beg > select.end) {
             selections_need_move.push_back(i);
         }
     }
@@ -3297,8 +3082,8 @@ void ImEdit::editor::paste_from_clipboard() {
     if (nb_lines == _cursors.size() && _cursors.size() != 1) {
 
         auto cursors = _cursors;
-        std::sort(cursors.begin(), cursors.end(), [this](const cursor& lhs, const cursor& rhs) {
-            return coordinates_lt(lhs.coord, rhs.coord);
+        std::sort(cursors.begin(), cursors.end(), [](const cursor& lhs, const cursor& rhs) {
+            return lhs.coord < rhs.coord;
         });
 
         auto cursor = cursors.begin();
@@ -3353,7 +3138,7 @@ bool ImEdit::editor::is_mouse_in_breakpoint_column() const noexcept {
 
 std::optional<unsigned int> ImEdit::editor::region_idx_for_cursor(cursor& c) {
     for (unsigned int i = 0 ; i < _selections.size() ; ++i) {
-        if (coordinates_eq(c.coord, _selections[i].beg) || coordinates_eq(c.coord, _selections[i].end)) {
+        if (c.coord == _selections[i].beg || c.coord == _selections[i].end) {
             return i;
         }
     }
