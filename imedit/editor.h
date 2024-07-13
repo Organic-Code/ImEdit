@@ -278,8 +278,8 @@ namespace ImEdit {
      * Utilities methods. Those do not call _public_methods_callback
      *
      */
-        [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
-        [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
+        [[nodiscard]] static bool coordinates_within(coordinates coord, region r) noexcept; // is in [beg ; end]
+        [[nodiscard]] static bool coordinates_within_ex(coordinates coord, region r) noexcept; // is in ]beg ; end[
 
         [[nodiscard]] unsigned int token_index_for(coordinates coord) const noexcept;
 

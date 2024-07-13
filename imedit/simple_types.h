@@ -199,7 +199,7 @@ namespace ImEdit {
         // cursor positions
         struct cursor_position {
             std::vector<region> selections;
-            std::vector<coordinates> positions;
+            std::vector<cursor> positions;
         };
 
         // char deletion
@@ -207,7 +207,7 @@ namespace ImEdit {
             std::vector<std::vector<char>> deleted_chars;
             std::vector<coordinates> delete_location;
 
-            std::vector<coordinates> cursors_coords;
+            std::vector<cursor> cursors_coords;
         };
 
         // char addition
@@ -215,21 +215,21 @@ namespace ImEdit {
             std::vector<std::vector<char>> added_chars;
             std::vector<coordinates> add_location;
 
-            std::vector<coordinates> cursors_coords;
+            std::vector<cursor> cursors_coords;
         };
 
         // new line
         struct new_line {
             coordinates new_line_location;
 
-            std::vector<coordinates> cursors_coords;
+            std::vector<cursor> cursors_coords;
         };
 
         // line deletion
         struct del_line {
             coordinates line_deletion_location;
 
-            std::vector<coordinates> cursors_coords;
+            std::vector<cursor> cursors_coords;
         };
 
         // selection deletion
@@ -237,7 +237,7 @@ namespace ImEdit {
             std::vector<line> deleted_selections;
             region selection_location;
 
-            std::vector<coordinates> cursors_coords;
+            std::vector<cursor> cursors_coords;
         };
 
         // pasting
@@ -245,7 +245,7 @@ namespace ImEdit {
             std::vector<coordinates> coordinates;
             std::string data;
 
-            std::vector<coordinates> cursors_coords;
+            std::vector<cursor> cursors_coords;
         };
 
         std::variant<
