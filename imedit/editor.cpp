@@ -2031,30 +2031,36 @@ void ImEdit::editor::delete_selection(ImEdit::region select) {
     } else {
         // Managing tokens
         {
-            const auto beg_tok_idx = token_index_for(beg);
-            token_view &beg_tok = _lines[beg.line].token_views[beg_tok_idx];
-            _lines[beg.line].token_views.erase(std::next(_lines[beg.line].token_views.begin(), beg_tok_idx + 1), _lines[beg.line].token_views.end());
-            beg_tok.length = beg.char_index - beg_tok.char_idx;
-            if (beg_tok.length == 0) {
-                _lines[beg.line].token_views.erase(std::next(_lines[beg.line].token_views.begin(), beg_tok_idx));
+            if (!_lines[beg.line].raw_text.empty()) {
+                const auto beg_tok_idx = token_index_for(beg);
+                token_view &beg_tok = _lines[beg.line].token_views[beg_tok_idx];
+                _lines[beg.line].token_views.erase(std::next(_lines[beg.line].token_views.begin(), beg_tok_idx + 1),
+                                                   _lines[beg.line].token_views.end());
+                beg_tok.length = beg.char_index - beg_tok.char_idx;
+                if (beg_tok.length == 0) {
+                    _lines[beg.line].token_views.erase(std::next(_lines[beg.line].token_views.begin(), beg_tok_idx));
+                }
             }
 
             // managing end line tokens in place, they will be copied later.
-            const auto end_tok_idx = token_index_for(end);
-            _lines[end.line].token_views.erase(_lines[end.line].token_views.begin(), std::next(_lines[end.line].token_views.begin(), end_tok_idx));
-            auto token = _lines[end.line].token_views.begin();
-            token->length = token->length - (end.char_index - token->char_idx);
-            token->char_idx = beg.char_index;
+            if (!_lines[end.line].raw_text.empty()) {
+                const auto end_tok_idx = token_index_for(end);
+                _lines[end.line].token_views.erase(_lines[end.line].token_views.begin(),
+                                                   std::next(_lines[end.line].token_views.begin(), end_tok_idx));
+                auto token = _lines[end.line].token_views.begin();
+                token->length = token->length - (end.char_index - token->char_idx);
+                token->char_idx = beg.char_index;
 
-            unsigned int next_token_idx = token->char_idx + token->length;
-            if (token->length == 0) {
-                token = _lines[end.line].token_views.erase(token);
-            } else {
-                ++token;
-            }
-            for (; token != _lines[end.line].token_views.end(); ++token) {
-                token->char_idx = next_token_idx;
-                next_token_idx += token->length;
+                unsigned int next_token_idx = token->char_idx + token->length;
+                if (token->length == 0) {
+                    token = _lines[end.line].token_views.erase(token);
+                } else {
+                    ++token;
+                }
+                for (; token != _lines[end.line].token_views.end(); ++token) {
+                    token->char_idx = next_token_idx;
+                    next_token_idx += token->length;
+                }
             }
         }
 
@@ -2524,9 +2530,26 @@ void ImEdit::editor::input_newline() {
         add_line_addition_record(c.coord);
 
         if (!_lines[c.coord.line].raw_text.empty()) {
-            auto& line = _lines[c.coord.line].raw_text;
-            std::copy(std::next(line.begin(), c.coord.char_index), line.end(), std::back_inserter(_lines[c.coord.line + 1].raw_text));
-            line.erase(c.coord.char_index);
+            auto& line = _lines[c.coord.line];
+            std::copy(std::next(line.raw_text.begin(), c.coord.char_index), line.raw_text.end(),
+                      std::back_inserter(_lines[c.coord.line + 1].raw_text));
+            line.raw_text.erase(c.coord.char_index);
+
+            auto token = std::next(line.token_views.begin(), token_index_for(c.coord));
+            if (token->char_idx + token->length == c.coord.char_index) {
+                ++token;
+            }
+
+            if (token != line.token_views.end()) {
+                std::copy(token, line.token_views.end(), std::back_inserter(_lines[c.coord.line + 1].token_views));
+                line.token_views.erase(token, line.token_views.end());
+
+                token = _lines[c.coord.line + 1].token_views.begin();
+                unsigned int char_idx_shift = token->char_idx;
+                for (; token != _lines[c.coord.line + 1].token_views.end(); ++token) {
+                    token->char_idx -= char_idx_shift;
+                }
+            }
         }
 
         for (cursor& c2 : _cursors) {
