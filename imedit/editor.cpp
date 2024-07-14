@@ -2401,10 +2401,18 @@ void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
     auto line_before = _lines[pos.coord.line];
 
     _lines[pos.coord.line].raw_text.insert(pos.coord.char_index, 1, ch);
-    auto token = std::next(_lines[pos.coord.line].token_views.begin(), token_index_for(pos.coord));
-    token->length++;
-    for (++token; token != _lines[pos.coord.line].token_views.end() ; ++token) {
-        token->char_idx++;
+    if (_lines[pos.coord.line].token_views.empty()) {
+        _lines[pos.coord.line].token_views.emplace_back();
+        auto token = _lines[pos.coord.line].token_views.begin();
+        token->char_idx = 0;
+        token->length = 1;
+        token->type = token_type::unknown;
+    } else {
+        auto token = std::next(_lines[pos.coord.line].token_views.begin(), token_index_for(pos.coord));
+        token->length++;
+        for (++token; token != _lines[pos.coord.line].token_views.end() ; ++token) {
+            token->char_idx++;
+        }
     }
 
     add_char_addition_record({ch}, pos.coord);
