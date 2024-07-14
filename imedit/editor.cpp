@@ -578,7 +578,12 @@ void ImEdit::editor::render() {
 
     if (!_autocompletion.empty()) {
         auto coords = _cursors.back().coord;
-        coords.char_index = _lines[coords.line].token_views[token_index_for(coords)].char_idx;
+        if (!_lines[coords.line].token_views.empty()) {
+            coords.char_index = _lines[coords.line].token_views[token_index_for(coords)].char_idx;
+        }
+        else {
+            coords.char_index = 0;
+        }
 
         float pos_x = static_cast<float>(column_count_to(coords)) * glyph_size().x + extra_padding;
         float pos_y = static_cast<float>(coords.line - first_rendered_line) * ImGui::GetTextLineHeightWithSpacing();
@@ -2360,6 +2365,14 @@ void ImEdit::editor::input_char_utf16(ImWchar ch) {
             advance += 3;
         }
 
+        if (_lines[c.coord.line].token_views.empty()) {
+            _lines[c.coord.line].token_views.push_back(token_view{
+                    .type = token_type::unknown,
+                    .char_idx = 0,
+                    .length = 0,
+                    .id = 0
+            });
+        }
         auto token = std::next(_lines[c.coord.line].token_views.begin(), token_index_for(c.coord));
         token->length += advance;
         for (++token ; token != _lines[c.coord.line].token_views.end() ; ++token) {
@@ -3028,6 +3041,7 @@ void ImEdit::editor::paste_from_clipboard() {
             coordinates coord = cursor->coord;
             while (*it != '\n' && *it != '\0') {
                 input_raw_char(*it++, *cursor);
+                cursor->coord.char_index++;
             }
             if (*it != '\0') {
                 ++it;
