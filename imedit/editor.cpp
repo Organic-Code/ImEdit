@@ -2008,10 +2008,10 @@ void ImEdit::editor::delete_selection(ImEdit::region select) {
 
         line.raw_text.erase(beg.char_index, end.char_index - beg.char_index);
 
-        auto shift_coordinates = [&beg, &end](coordinates& coord) {
+        auto shift_coordinates = [&beg, &end, &deleted_chars_count](coordinates& coord) {
             if (coord.line == end.line) {
                 if (coord.char_index > end.char_index) {
-                    coord.char_index -= (end.char_index - beg.char_index);
+                    coord.char_index -= deleted_chars_count;
                 }
                 else if (coord.char_index > beg.char_index) {
                     coord.char_index = beg.char_index;
@@ -2025,8 +2025,6 @@ void ImEdit::editor::delete_selection(ImEdit::region select) {
             shift_coordinates(_selections[idx].beg);
             shift_coordinates(_selections[idx].end);
         }
-        sanitize_cursors();
-        sanitize_selections();
 
     } else {
         // Managing tokens
