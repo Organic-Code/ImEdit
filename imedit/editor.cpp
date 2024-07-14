@@ -578,7 +578,7 @@ void ImEdit::editor::render() {
 
     if (!_autocompletion.empty()) {
         auto coords = _cursors.back().coord;
-        coords.char_index = 0;
+        coords.char_index = _lines[coords.line].token_views[token_index_for(coords)].char_idx;
 
         float pos_x = static_cast<float>(column_count_to(coords)) * glyph_size().x + extra_padding;
         float pos_y = static_cast<float>(coords.line - first_rendered_line) * ImGui::GetTextLineHeightWithSpacing();
@@ -2640,6 +2640,7 @@ void ImEdit::editor::show_breakpoint_window() {
 
 void ImEdit::editor::show_autocomplete_window(ImVec2 coords) {
     coords.y += ImGui::GetTextLineHeightWithSpacing() - ImGui::GetStyle().WindowPadding.y;
+    coords.x -= ImGui::GetStyle().WindowPadding.x;
     ImGui::SetNextWindowPos(coords);
 
     bool just_took_focus = _auto_completion_should_take_focus;
@@ -2705,6 +2706,8 @@ void ImEdit::editor::auto_complete_or_tab_input() {
         input_raw_char('\t');
     }
     else {
+        // TODO add undo record
+
         assert(_autocompletion_selection);
         const std::string& str = _autocompletion[*_autocompletion_selection];
         for (cursor& c : _cursors) {
