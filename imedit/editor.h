@@ -241,8 +241,8 @@ namespace ImEdit {
         // When matching token is hovered and _tooltips[token] exists, calls ImGui::BeginTooltip,
         // and either prints the variant’s string, or calls the std::function so that you can draw whatever you wish in the tooltip.
         // Callback is called with _tooltip_data as its first parameter.
-        using tooltip_callback = std::function<void(std::any tooltip_data, const token&)>;
-        std::unordered_map<token, std::variant<std::string, tooltip_callback>, token_hash> _tooltips; // when modifying this, remember to call editor::reset_current_tooltip
+        using tooltip_callback = std::function<void(std::any tooltip_data, const token_view&)>;
+        std::unordered_map<token_view, std::variant<std::string, tooltip_callback>, token_hash> _tooltips; // when modifying this, remember to call editor::reset_current_tooltip
         std::any _tooltip_data{nullptr}; // Passed to tooltip callbacks as user data
         std::chrono::milliseconds _tooltip_delay{std::chrono::seconds(1)}; // Delay before the tooltip appears
         std::chrono::milliseconds _tooltip_grace_period{std::chrono::milliseconds(250)}; // Delay for which the tooltip stays up, even after the mouse went away
@@ -278,11 +278,10 @@ namespace ImEdit {
      * Utilities methods. Those do not call _public_methods_callback
      *
      */
-        [[nodiscard]] bool coordinates_eq(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_lt(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_lt_eq(coordinates lhs, coordinates rhs) const noexcept;
-        [[nodiscard]] bool coordinates_within(coordinates coord, region r) const noexcept; // is in [beg ; end]
-        [[nodiscard]] bool coordinates_within_ex(coordinates coord, region r) const noexcept; // is in ]beg ; end[
+        [[nodiscard]] static bool coordinates_within(coordinates coord, region r) noexcept; // is in [beg ; end]
+        [[nodiscard]] static bool coordinates_within_ex(coordinates coord, region r) noexcept; // is in ]beg ; end[
+
+        [[nodiscard]] unsigned int token_index_for(coordinates coord) const noexcept;
 
     /*************************************************************************************
      *
@@ -309,18 +308,9 @@ namespace ImEdit {
 
         [[nodiscard]] coordinates_cbl screen_to_token_coordinates(ImVec2 pos) const;
 
-        [[nodiscard]] simple_coord to_simple_coords(coordinates) const noexcept;
-        [[nodiscard]] std::vector<simple_coord> cursors_as_simple() const;
-        [[nodiscard]] std::vector<simple_coord> cursors_as_simple(const std::vector<cursor>& cursors) const;
-        [[nodiscard]] std::vector<simple_region> selections_as_simple() const;
-        [[nodiscard]] coordinates from_simple_coords(simple_coord) const noexcept;
-        [[nodiscard]] static coordinates from_simple_coords_within(simple_coord, const line&) noexcept;
-        [[nodiscard]] std::vector<cursor> cursors_from_simple(const std::vector<simple_coord>&) const;
-        [[nodiscard]] std::vector<region> selections_from_simple(const std::vector<simple_region>&) const;
-
-        [[nodiscard]] region sorted_region(region) const noexcept;
-        [[nodiscard]] coordinates& greater_coordinates_of(region&) const noexcept;
-        [[nodiscard]] coordinates& smaller_coordinates_of(region&) const noexcept;
+        [[nodiscard]] static region sorted_region(region) noexcept;
+        [[nodiscard]] static coordinates& greater_coordinates_of(region&) noexcept;
+        [[nodiscard]] static coordinates& smaller_coordinates_of(region&) noexcept;
 
         void delete_selection(region select); // Does NOT remove select from _selections
 
