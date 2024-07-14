@@ -2435,9 +2435,19 @@ void ImEdit::editor::input_newline() {
                       std::back_inserter(_lines[c.coord.line + 1].raw_text));
             line.raw_text.erase(c.coord.char_index);
 
-            auto token = std::next(line.token_views.begin(), token_index_for(c.coord));
+            const unsigned int token_idx = token_index_for(c.coord);
+            auto token = std::next(line.token_views.begin(), token_idx);
             if (token->char_idx + token->length == c.coord.char_index) {
                 ++token;
+            }
+            else if (token->char_idx < c.coord.char_index) {
+                token_view new_token;
+                new_token.char_idx = c.coord.char_index;
+                new_token.length = token->length + token->char_idx - c.coord.char_index;
+                new_token.type = token->type;
+
+                token->length = c.coord.char_index - token->char_idx;
+                token = line.token_views.insert(std::next(token), new_token);
             }
 
             if (token != line.token_views.end()) {
