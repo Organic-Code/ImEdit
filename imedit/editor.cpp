@@ -2161,113 +2161,15 @@ void ImEdit::editor::undo() {
         else if constexpr (std::is_same_v<T, record::del_selection>) {
             // TODO call lexer
 
-            if (val.selection_location.beg.line == val.selection_location.end.line) {
-                assert(val.deleted_selections.size() == 1);
-
-                simple_region loc = val.selection_location;
-                if (loc.beg.char_index > loc.end.char_index) {
-                    std::swap(loc.beg.char_index, loc.end.char_index);
-                }
-                coordinates beg_within_global = from_simple_coords(loc.beg);
-                coordinates beg_within_deleted = from_simple_coords_within(loc.beg, val.deleted_selections.front());
-
-                // .beg coordinates are valid for _lines. .end coordinates are not (but they are valid for val.deleted_selections)
-                unsigned int char_idx_min = std::min(loc.beg.char_index, loc.end.char_index);
-                unsigned int char_idx_max = std::max(loc.beg.char_index, loc.end.char_index);
-
-                unsigned int char_count = char_idx_max - char_idx_min;
-                unsigned int current_token = beg_within_deleted.token;
-                unsigned int current_idx = beg_within_deleted.char_index;
-
-                std::string char_to_be_added;
-                char_to_be_added.reserve(char_count);
-
-                if (val.deleted_selections.front().tokens[current_token].data.size() == current_idx) {
-                    ++current_token;
-                    current_idx = 0;
-                }
-
-                while (char_count > 0) {
-                    const token& token = val.deleted_selections.front().tokens[current_token];
-                    char_to_be_added += token.data[current_idx];
-
-                    if (current_idx + 1 == token.data.size()) {
-                        current_idx = 0;
-                        current_token++;
-                    }
-                    else {
-                        current_idx++;
-                    }
-
-
-                    --char_count;
-                }
-                auto& str = _lines[beg_within_global.line].tokens[beg_within_global.token].data;
-                str = str.substr(0, beg_within_global.char_index) + char_to_be_added + str.substr(beg_within_global.char_index);
-
-            } else {
-                coordinates beg, end;
-                {
-                    region tmp{from_simple_coords(val.selection_location.beg), from_simple_coords(val.selection_location.end)};
-                    beg = smaller_coordinates_of(tmp);
-                    end = greater_coordinates_of(tmp);
-                }
-                assert(end.line - beg.line + 1 == val.deleted_selections.size());
-
-                // chars that are at then end of _lines[beg.line], that should be moved at the end of the selection
-                std::string chars_to_be_moved;
-                if (!_lines[beg.line].tokens.empty()) {
-                    for (unsigned int i = beg.char_index; i < _lines[beg.line].tokens[beg.token].data.size(); ++i) {
-                        chars_to_be_moved.push_back(_lines[beg.line].tokens[beg.token].data[i]);
-                    }
-                    for (unsigned int i = beg.token + 1; i < _lines[beg.line].tokens.size(); ++i) {
-                        chars_to_be_moved += _lines[beg.line].tokens[i].data;
-                    }
-
-                    if (beg.char_index < _lines[beg.line].tokens[beg.token].data.size()) {
-                        _lines[beg.line].tokens[beg.token].data.erase(beg.char_index);
-                    }
-                    _lines[beg.line].tokens.erase(std::next(_lines[beg.line].tokens.begin(), beg.token + 1), _lines[beg.line].tokens.end());
-                    if (_lines[beg.line].tokens[beg.token].data.empty()) {
-                        _lines[beg.line].tokens.erase(std::next(_lines[beg.line].tokens.begin(), beg.token));
-                    }
-                }
-
-                if (beg.char_index != 0) {
-                    if (_lines[beg.line].tokens.empty()) {
-                        _lines[beg.line].tokens.emplace_back();
-                    }
-                    _lines[beg.line].tokens.back().data += val.deleted_selections.front().tokens[beg.token].data.substr(beg.char_index);
-                } else {
-                    --beg.token;
-                }
-
-                for (unsigned int i = beg.token + 1 ; i < val.deleted_selections.front().tokens.size() ; ++i) {
-                    _lines[beg.line].tokens.emplace_back(val.deleted_selections.front().tokens[i]);
-                }
-
-
-
-                for (unsigned int i = beg.line + 1; i < end.line; ++i) {
-                    _lines.insert(std::next(_lines.begin(), i), std::move(val.deleted_selections[i - beg.line]));
-                }
-
-                std::deque<token>& end_tokens = _lines.insert(std::next(_lines.begin(), end.line), line{})->tokens;
-                const std::deque<token>& deleted_tokens = val.deleted_selections.back().tokens;
-
-                end_tokens.emplace_back();
-                for (unsigned int i = 0; i < end.token; ++i) {
-                    end_tokens[0].data += deleted_tokens[i].data;
-                }
-                for (unsigned int i = 0; i < end.char_index; ++i) {
-                    end_tokens[0].data += deleted_tokens[end.token].data[i];
-                }
-                end_tokens[0].data += chars_to_be_moved;
-                end_tokens[0].type = token_type::unknown;
+            region loc = sorted_region(val.selection_location);
+            for (unsigned int i = 1 ; i < val.deleted_selections.size() ; ++i) {
+                _lines.insert(std::next(_lines.begin(), i + loc.beg.line), std::move(val.deleted_selections[i]));
             }
+            _lines[loc.beg.line] = val.deleted_selections.front();
+            _lines[loc.end.line] = std::move(val.deleted_selections.back());
 
             find_longest_line(); // FIXME do not call this here, be more specific about it.
-            _cursors = cursors_from_simple(val.cursors_coords);
+            _cursors = val.cursors_coords;
 
         }
         else if constexpr (std::is_same_v<T, record::paste>) {
@@ -2277,20 +2179,20 @@ void ImEdit::editor::undo() {
             if (nb_lines == val.cursors_coords.size()) {
                 std::istringstream iss{val.data};
                 std::string line;
-                for (simple_coord sc: val.coordinates) {
+                for (coordinates sc: val.coordinates) {
                     std::getline(iss, line, '\n');
-                    simple_coord end;
+                    coordinates end;
                     end.line = sc.line;
                     end.char_index = line.size() + sc.char_index;
-                    regions.push_back({from_simple_coords(sc), from_simple_coords(end)});
+                    regions.push_back({sc, end});
                 }
             } else {
                 auto last = val.data.find_last_of('\n') + 1;
-                for (simple_coord sc: val.coordinates) {
-                    simple_coord end;
+                for (coordinates sc: val.coordinates) {
+                    coordinates end;
                     end.line = sc.line + nb_lines - 1;
                     end.char_index = val.data.size() - last;
-                    regions.push_back({from_simple_coords(sc), from_simple_coords(end)});
+                    regions.push_back({sc, end});
                 }
 
             }
@@ -2306,7 +2208,7 @@ void ImEdit::editor::undo() {
         }
     }, _undo_record_it->value);
 
-    _should_create_records = original_record_status;*/
+    _should_create_records = original_record_status;
     IMEDIT_RESTORE_PMC
 }
 
