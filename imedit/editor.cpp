@@ -1645,18 +1645,23 @@ void ImEdit::editor::delete_glyph(coordinates co) {
         while (co.char_index-- > 0 &&  is_within_utf8(str[co.char_index]));
         const auto char_count = char_count_for_utf8(str[co.char_index]);
 
-        // managing tokens
+        // managing tokens; we rewinded co.char_index so we might need to rewind token aswell
         auto token = std::next(_lines[co.line].token_views.begin(), token_index_for(co));
-        token->length -= char_count;
-        if (token->length == 0) {
-            token = _lines[co.line].token_views.erase(token);
-        } else {
+        if (token->char_idx + token->length == co.char_index) {
             ++token;
         }
-        for (; token != _lines[co.line].token_views.end() ; ++token) {
-            token->char_idx -= char_count;
-        }
 
+        if (token != _lines[co.line].token_views.end()) {
+            token->length -= char_count;
+            if (token->length == 0) {
+                token = _lines[co.line].token_views.erase(token);
+            } else {
+                ++token;
+            }
+            for (; token != _lines[co.line].token_views.end(); ++token) {
+                token->char_idx -= char_count;
+            }
+        }
 
         deleted_chars.reserve(char_count);
         for (auto i = 0 ; i < char_count ; ++i) {
