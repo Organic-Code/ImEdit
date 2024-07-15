@@ -353,6 +353,8 @@ namespace ImEdit {
         void add_paste_record(const std::vector<coordinates>& coord, std::string data);
         void commit_record(record r);
 
+        void newline_input_impl(bool should_move_self); // should_move_self == false : does not move the cursor
+
         std::vector<cursor> _cursors{};
         std::deque<line> _lines{};
 

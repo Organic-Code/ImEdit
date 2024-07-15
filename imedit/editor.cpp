@@ -2462,6 +2462,20 @@ void ImEdit::editor::input_raw_char(char ch, ImEdit::cursor &pos) {
 void ImEdit::editor::input_newline() {
     IMEDIT_CALL_PMC(input_newline)
 
+    newline_input_impl(true);
+
+    IMEDIT_RESTORE_PMC
+}
+
+void ImEdit::editor::input_newline_nomove() {
+    IMEDIT_CALL_PMC(input_newline)
+
+    newline_input_impl(false);
+
+    IMEDIT_RESTORE_PMC
+}
+
+void ImEdit::editor::newline_input_impl(bool should_move_self) {
     clear_search();
     delete_selections();
     for (cursor& c : _cursors) {
@@ -2511,51 +2525,18 @@ void ImEdit::editor::input_newline() {
                 c2.wanted_column = column_count_to(c2.coord);
             }
         }
-        ++c.coord.line;
-        c.coord.char_index = c.wanted_column = 0;
+
+        if (should_move_self) {
+            ++c.coord.line;
+            c.coord.char_index = c.wanted_column = 0;
+        }
 
         if (_on_data_modified_new_line) {
             _on_data_modified_new_line(_on_data_modified_data, c.coord.line, *this);
         }
     }
-
-    IMEDIT_RESTORE_PMC
 }
 
-void ImEdit::editor::input_newline_nomove() {
-    IMEDIT_CALL_PMC(input_newline)
-
-    // TODO: mostly the same as input_newline. Should merge both methods together
-    clear_search();
-    delete_selections();
-    for (cursor& c : _cursors) {
-        _lines.insert(std::next(_lines.cbegin(), c.coord.line + 1), line{});
-        add_line_addition_record(c.coord);
-
-        if (!_lines[c.coord.line].raw_text.empty()) {
-            auto& line = _lines[c.coord.line].raw_text;
-            std::copy(std::next(line.begin(), c.coord.char_index), line.end(), std::back_inserter(_lines[c.coord.line + 1].raw_text));
-            line.erase(c.coord.char_index);
-        }
-
-        for (cursor& c2 : _cursors) {
-            if (c2.coord.line > c.coord.line) {
-                ++c2.coord.line;
-            }
-            else if (c2.coord.line == c.coord.line && c2.coord.char_index > c.coord.char_index) {
-                ++c2.coord.line;
-                c2.coord.char_index -= c.coord.char_index;
-                c2.wanted_column = column_count_to(c2.coord);
-            }
-        }
-
-        if (_on_data_modified_new_line) {
-            _on_data_modified_new_line(_on_data_modified_data, c.coord.line + 1, *this);
-        }
-    }
-
-    IMEDIT_RESTORE_PMC
-}
 
 void ImEdit::editor::input_delete() {
     IMEDIT_CALL_PMC(input_delete)
