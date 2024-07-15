@@ -146,7 +146,14 @@ ImEdit::editor::iterator &ImEdit::editor::iterator::operator++() noexcept {
     assert((current.line + 1 < ed->_lines.size()
             || current.char_index < ed->_lines.back().raw_text.size())
             && "Trying to increment past .end()");
-    current = ed->move_coordinates_right(current);
+
+    if (current.char_index == ed->_lines[current.line].raw_text.size()) {
+        current.char_index = 0;
+        ++current.line;
+    }
+    else {
+        ++current.char_index;
+    }
     return *this;
 }
 
@@ -158,7 +165,13 @@ ImEdit::editor::iterator ImEdit::editor::iterator::operator--(int) noexcept {
 
 ImEdit::editor::iterator &ImEdit::editor::iterator::operator--() noexcept {
     assert((current.line > 0 || current.char_index > 0) && "Trying to decrement before .begin()");
-    current = ed->move_coordinates_left(current);
+    if (current.char_index > 0) {
+        --current.char_index;
+    }
+    else {
+        --current.line;
+        current.char_index = ed->_lines[current.line].raw_text.size();
+    }
     return *this;
 }
 

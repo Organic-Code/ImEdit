@@ -135,11 +135,11 @@ namespace ImEdit {
         unsigned int char_index{};
 
         bool operator<(const coordinates& rhs) const noexcept {
-            return line < rhs.line || line == rhs.line && char_index < rhs.char_index;
+            return line < rhs.line || (line == rhs.line && char_index < rhs.char_index);
         }
 
         bool operator<=(const coordinates& rhs) const noexcept {
-            return line < rhs.line || line == rhs.line && char_index <= rhs.char_index;
+            return line < rhs.line || (line == rhs.line && char_index <= rhs.char_index);
         }
 
         bool operator!=(const coordinates& rhs) const noexcept {
@@ -242,7 +242,7 @@ namespace ImEdit {
 
         // pasting
         struct paste {
-            std::vector<coordinates> coordinates;
+            std::vector<ImEdit::coordinates> coordinates;
             std::string data;
 
             std::vector<cursor> cursors_coords;
