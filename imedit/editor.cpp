@@ -2769,6 +2769,86 @@ void ImEdit::editor::select_prev_autocomplete_or_up() {
     }
 }
 
+
+// TODO test me
+void ImEdit::editor::add_token(unsigned int line_idx, const ImEdit::token_view &token) {
+    assert(line_idx < _lines.size());
+    assert(token.char_idx + token.length <= _lines[line_idx].raw_text.size() && "Token out of bounds");
+
+    auto& line = _lines[line_idx];
+    unsigned int first_tok_idx = 0; // first token that has common characters with param token
+    while (first_tok_idx < line.token_views.size() &&
+        token.char_idx < line.token_views[first_tok_idx].char_idx) {
+        ++first_tok_idx;
+    }
+    assert(first_tok_idx < line.token_views.size() && "Unexpected state : missing tokens");
+
+    unsigned int last_tok_idx = first_tok_idx; // last token that has common characters with param token
+    while (last_tok_idx < line.token_views.size() &&
+        token.char_idx + token.length < line.token_views[last_tok_idx].char_idx) {
+        ++last_tok_idx;
+    }
+    assert(last_tok_idx < line.token_views.size() && "Unexpected state : missing tokens");
+
+
+    if (first_tok_idx == last_tok_idx) {
+        token_view& other_token = line.token_views[first_tok_idx];
+        if (other_token.char_idx == token.char_idx && other_token.length == token.length) { // same coordinates
+            other_token = token;
+        }
+        else if (other_token.char_idx == token.char_idx) { // same starting point
+            other_token.char_idx += token.length;
+            other_token.length -= token.length;
+            line.token_views.insert(std::next(line.token_views.begin(), first_tok_idx), token);
+        }
+        else if (other_token.char_idx + other_token.length == token.char_idx + token.length) { // same end point
+
+        }
+        else { // token is in the middle of other_token
+            token_view new_token;
+            new_token.char_idx = token.char_idx + token.length;
+            new_token.length = other_token.char_idx + other_token.length - new_token.char_idx;
+
+            other_token.length = token.char_idx - other_token.char_idx;
+
+            line.token_views.insert(std::next(line.token_views.begin(), first_tok_idx + 1), new_token);
+            line.token_views.insert(std::next(line.token_views.begin(), first_tok_idx + 1), token);
+        }
+
+    }
+    else {
+        line.token_views.erase(std::next(line.token_views.begin(), first_tok_idx + 1)
+                               , std::next(line.token_views.begin(), last_tok_idx));
+        last_tok_idx = first_tok_idx + 1;
+        {
+            token_view& first_token = line.token_views[first_tok_idx];
+            if (first_token.char_idx == token.char_idx) {
+                first_token = token;
+            }
+            else {
+                first_token.length = token.char_idx - first_token.char_idx;
+                line.token_views.insert(std::next(line.token_views.begin(), first_tok_idx + 1), token); // first_token invalidated
+                ++last_tok_idx;
+            }
+        }
+
+        {
+            token_view& last_token = line.token_views[last_tok_idx];
+            if (last_token.char_idx == token.char_idx + token.length) {
+                // Nothing to do
+            }
+            else if (last_token.char_idx + last_token.length == token.char_idx + token.length) {
+                line.token_views.erase(std::next(line.token_views.begin(), last_tok_idx));
+            }
+            else {
+                last_token.length = last_token.char_idx + last_token.length - (token.char_idx + token.length);
+                last_token.char_idx = token.char_idx + token.length;
+            }
+        }
+    }
+
+}
+
 void ImEdit::editor::add_cursor_undo_record() {
     if (!_should_create_records) {
         return;

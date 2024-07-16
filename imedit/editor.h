@@ -155,6 +155,8 @@ namespace ImEdit {
         void select_next_autocomplete_or_down(); // if auto complete isn’t empty, selects the next one, else moves the cursor down (default : arrow down)
         void select_prev_autocomplete_or_up(); // if auto complete isn’t empty, selects the previous one, else moves the cursor up (default : arrow up)
 
+        void add_token(unsigned int line, const token_view& token);
+
         /*****************************************
          * The following methods call _public_methods_callback
          */
