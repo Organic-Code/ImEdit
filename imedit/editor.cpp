@@ -2778,14 +2778,14 @@ void ImEdit::editor::add_token(unsigned int line_idx, const ImEdit::token_view &
     auto& line = _lines[line_idx];
     unsigned int first_tok_idx = 0; // first token that has common characters with param token
     while (first_tok_idx < line.token_views.size() &&
-        token.char_idx < line.token_views[first_tok_idx].char_idx) {
+           token.char_idx > line.token_views[first_tok_idx].char_idx + line.token_views[first_tok_idx].length) {
         ++first_tok_idx;
     }
     assert(first_tok_idx < line.token_views.size() && "Unexpected state : missing tokens");
 
     unsigned int last_tok_idx = first_tok_idx; // last token that has common characters with param token
     while (last_tok_idx < line.token_views.size() &&
-        token.char_idx + token.length < line.token_views[last_tok_idx].char_idx) {
+           token.char_idx + token.length > line.token_views[last_tok_idx].char_idx + line.token_views[last_tok_idx].length) {
         ++last_tok_idx;
     }
     assert(last_tok_idx < line.token_views.size() && "Unexpected state : missing tokens");
