@@ -912,6 +912,10 @@ ImEdit::coordinates ImEdit::editor::move_coordinates_right(coordinates coord) co
 }
 
 ImEdit::coordinates ImEdit::editor::move_coordinates_left_token(coordinates co) const noexcept {
+    if (co.char_index == 0) {
+        return move_coordinates_left(co);
+    }
+
     unsigned int tok = token_index_for(co);
     if (co.char_index > _lines[co.line].token_views[tok].char_idx) {
         co.char_index = _lines[co.line].token_views[tok].char_idx;
